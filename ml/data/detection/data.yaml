@@ -1,0 +1,30 @@
+path: /home/gopikrishna/Documents/uzhavan bazzzar/ml/data/detection
+train: train/images
+val: val/images
+test: test/images
+nc: 24
+names:
+  0: Apple
+  1: Banana
+  2: Bellpepper
+  3: Carrot
+  4: Cucumber
+  5: Grape
+  6: Guava
+  7: Jujube
+  8: Mango
+  9: Orange
+  10: Pomegranate
+  11: Potato
+  12: Strawberry
+  13: Tomato
+  14: Bean
+  15: Bitter Gourd
+  16: Bottle Gourd
+  17: Brinjal
+  18: Broccoli
+  19: Cabbage
+  20: Cauliflower
+  21: Papaya
+  22: Pumpkin
+  23: Radish

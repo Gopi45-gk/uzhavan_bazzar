@@ -1,0 +1,6 @@
+{
+  "name": "Uzhavan Bazzar",
+  "description": "Uzhavan Bazzar mobile app featuring animated splash, multilingual language selection, farmer/buyer portal selection, and role-specific login screens.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

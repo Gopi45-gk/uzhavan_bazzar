@@ -1,0 +1,25 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Product images:
+    // Stored under product-images/{uid}/{productId}/{fileName}
+    // Read: Public for buyers to view produce photos in marketplace
+    // Write: Strictly restricted to the authenticated farmer whose UID matches the folder
+    match /product-images/{uid}/{productId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == uid;
+      allow delete: if isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Default deny for all other storage paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+ml_env/
+.venv/
+env/
+venv/
+
+# Production and build outputs
+dist/
+dist-ssr/
+.next/
+out/
+build/
+
+# Python & ML Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# YOLO & ML training runs
+runs/
+ml/runs/
+ml/data/detection/runs/
+yolov8n.pt
+yolov8s.pt
+weights/
+
+# Datasets (large image archives)
+dataset/
+Unified_Dataset
+vegetable/
+ml/data/detection/train/
+ml/data/detection/val/
+ml/data/detection/test/
+ml/data/quality/train/
+ml/data/quality/val/
+ml/data/quality/test/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
