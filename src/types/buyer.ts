@@ -20,6 +20,7 @@ export interface BuyerFeedProduct {
   productName: string;
   grade: 'A' | 'B' | 'C' | string;
   productImg: string;
+  farmerId?: string;
   farmerName: string;
   location: string;
   rate: number;
@@ -43,7 +44,10 @@ export interface UserOrder {
   date: string;
   amount: string;
   quantity?: string;
+  farmerId?: string;
   farmerName?: string;
+  productId?: string;
+  orderStatus?: string;
   statusKey: 'ongoing' | 'delivered' | 'cancelled' | string;
 }
 

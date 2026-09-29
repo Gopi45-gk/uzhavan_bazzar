@@ -22,30 +22,36 @@ import torch.nn as nn
 from torchvision import transforms
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
+import cv2
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from train_quality import QualityGradingModel
 
 
 def load_config(config_path="ml/config.yaml"):
+    if not os.path.exists(config_path):
+        for candidate in ["config.yaml", "/app/ml/config.yaml", os.path.join(os.path.dirname(__file__), "config.yaml")]:
+            if os.path.exists(candidate):
+                config_path = candidate
+                break
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
 
+
 def score_to_grade(score, grading_config):
-    """Map quality score (0-100) to letter grade."""
-    for grade in ["A", "B", "C", "D"]:
-        params = grading_config["grades"][grade]
-        if score >= params["min_score"]:
-            return grade, params["description"]
-    return "D", grading_config["grades"]["D"]["description"]
+    """Map quality score (0-100) strictly to letter grade A, B, or C."""
+    for grade in ["A", "B", "C"]:
+        params = grading_config.get("grades", {}).get(grade, {})
+        if score >= params.get("min_score", 0):
+            return grade, params.get("description", f"Grade {grade}")
+    return "C", grading_config.get("grades", {}).get("C", {}).get("description", "Grade C")
 
 
 GRADE_COLORS = {
     "A": (76, 175, 80),     # Green
     "B": (139, 195, 74),    # Light Green
-    "C": (255, 152, 0),     # Orange
-    "D": (244, 67, 54),     # Red
+    "C": (255, 152, 0),     # Orange / Amber
 }
 
 
@@ -127,6 +133,8 @@ class InferencePipeline:
             self.config["hardware"]["device"] if torch.cuda.is_available() else "cpu"
         )
         self.detection_model = None
+        self.coco_model = None
+        self.face_detector = None
         self.quality_model = None
         self.quality_transform = None
         self.class_names = None
@@ -135,22 +143,62 @@ class InferencePipeline:
         self._load_models()
     
     def _load_models(self):
-        """Load both models into memory."""
+        """Load produce detection, human/context detection, and quality models."""
         print(f"Loading models on {self.device}...")
         
-        # Stage 1: YOLOv8 Detection
+        # Stage 1: Custom YOLOv8 Produce Detection
         from ultralytics import YOLO
-        det_path = os.path.join(self.config["paths"]["detection_model_dir"], "best.pt")
+        det_path = os.path.join(self.config["paths"].get("detection_model_dir", ""), "best.pt")
+        if not os.path.exists(det_path):
+            for cand in ["models/detection/best.pt", "/app/models/detection/best.pt", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "detection", "best.pt")]:
+                if os.path.exists(cand):
+                    det_path = cand
+                    break
         if os.path.exists(det_path):
             self.detection_model = YOLO(det_path)
-            print(f"  ✓ Custom Detection model loaded: {det_path}")
+            print(f"  ✓ Custom Produce Detection model loaded: {det_path}")
         else:
             base_model = self.config["detection"].get("base_model", "yolov8n.pt")
             self.detection_model = YOLO(base_model)
             print(f"  ✓ Detection base model loaded: {base_model}")
+
+        # Human & Non-Produce Context Detector (COCO Pretrained YOLOv8)
+        coco_path = "yolov8n.pt"
+        if not os.path.exists(coco_path):
+            for cand in ["/app/yolov8n.pt", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "yolov8n.pt")]:
+                if os.path.exists(cand):
+                    coco_path = cand
+                    break
+        if os.path.exists(coco_path):
+            self.coco_model = YOLO(coco_path)
+            print(f"  ✓ Human & Context Detector loaded: {coco_path}")
+        else:
+            self.coco_model = None
+
+        # Neural Face Detector (OpenCV YuNet)
+        face_model_path = os.path.join(self.config["paths"].get("detection_model_dir", ""), "face_detection_yunet.onnx")
+        if not os.path.exists(face_model_path):
+            for cand in ["models/detection/face_detection_yunet.onnx", "/app/models/detection/face_detection_yunet.onnx", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "detection", "face_detection_yunet.onnx")]:
+                if os.path.exists(cand):
+                    face_model_path = cand
+                    break
+        if os.path.exists(face_model_path):
+            try:
+                self.face_detector = cv2.FaceDetectorYN_create(face_model_path, "", (320, 320))
+                print(f"  ✓ Neural Face Detector loaded: {face_model_path}")
+            except Exception as e:
+                print(f"  ⚠ Could not load YuNet: {e}")
+                self.face_detector = None
+        else:
+            self.face_detector = None
         
         # Stage 2: CNN Quality Grading
-        qual_path = os.path.join(self.config["paths"]["quality_model_dir"], "best.pth")
+        qual_path = os.path.join(self.config["paths"].get("quality_model_dir", ""), "best.pth")
+        if not os.path.exists(qual_path):
+            for cand in ["models/quality/best.pth", "/app/models/quality/best.pth", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "quality", "best.pth")]:
+                if os.path.exists(cand):
+                    qual_path = cand
+                    break
         if not os.path.exists(qual_path):
             raise FileNotFoundError(f"Quality model not found: {qual_path}")
         
@@ -174,6 +222,88 @@ class InferencePipeline:
         print(f"  ✓ Quality model loaded: {qual_path}")
         print(f"  ✓ Quality classes: {self.class_names}")
         print(f"Models ready!\n")
+
+    def _detect_humans_and_clutter(self, img_pil):
+        """
+        Detect humans, faces, and indoor non-produce clutter to prevent hallucinations.
+        """
+        w, h = img_pil.size
+        person_boxes = []
+        face_boxes = []
+        clutter_items = []
+
+        # 1. COCO detection
+        if self.coco_model is not None:
+            try:
+                res = self.coco_model.predict(img_pil, conf=0.25, verbose=False)
+                if res and len(res) > 0 and res[0].boxes is not None:
+                    for b in res[0].boxes:
+                        cls_id = int(b.cls[0].cpu())
+                        conf = float(b.conf[0].cpu())
+                        name = res[0].names.get(cls_id, "")
+                        coords = b.xyxy[0].cpu().numpy().tolist()
+                        if name == "person" and conf >= 0.25:
+                            person_boxes.append(coords)
+                        elif name in ["cell phone", "laptop", "tv", "remote", "keyboard", "mouse", "chair", "bed", "couch", "scissors", "bottle", "book", "cup"]:
+                            clutter_items.append(name)
+            except Exception as e:
+                print(f"Context detection note: {e}")
+
+        # 2. YuNet face detection
+        if self.face_detector is not None:
+            try:
+                img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+                ih, iw = img_cv.shape[:2]
+                self.face_detector.setInputSize((iw, ih))
+                _, faces = self.face_detector.detect(img_cv)
+                if faces is not None:
+                    for f in faces:
+                        if float(f[-1]) >= 0.40:
+                            fx, fy, fw, fh = f[:4].astype(int)
+                            face_boxes.append([max(0, fx), max(0, fy), min(iw, fx + fw), min(ih, fy + fh)])
+            except Exception as e:
+                print(f"Face detector note: {e}")
+
+        has_human = len(person_boxes) > 0 or len(face_boxes) > 0
+        return {
+            "has_human": has_human,
+            "person_boxes": person_boxes,
+            "face_boxes": face_boxes,
+            "clutter_items": clutter_items,
+        }
+
+    def _is_overlapping_human(self, pbox, person_boxes, face_boxes, img_w=None, img_h=None):
+        """
+        Check if a produce candidate box overlaps with a human body or face (hallucination).
+        """
+        def box_overlap(boxA, boxB):
+            xA = max(boxA[0], boxB[0])
+            yA = max(boxA[1], boxB[1])
+            xB = min(boxA[2], boxB[2])
+            yB = min(boxA[3], boxB[3])
+            inter = max(0, xB - xA) * max(0, yB - yA)
+            areaA = max((boxA[2] - boxA[0]) * (boxA[3] - boxA[1]), 1e-6)
+            return inter / areaA
+
+        # Face overlap: > 15% overlap means false positive on human face
+        for fbox in face_boxes:
+            if box_overlap(pbox, fbox) > 0.15:
+                return True
+
+        # Person body overlap: > 25% overlap inside person
+        for pbox_human in person_boxes:
+            if box_overlap(pbox, pbox_human) > 0.25:
+                return True
+
+        # Full-frame hallucination (> 75% image) while human is in frame
+        if img_w and img_h:
+            area_img = img_w * img_h
+            area_box = (pbox[2] - pbox[0]) * (pbox[3] - pbox[1])
+            if (area_box / area_img) > 0.75 and (person_boxes or face_boxes):
+                return True
+
+        return False
+
     
     def predict(self, image_path, conf_threshold=None, annotate=True):
         """
@@ -200,6 +330,9 @@ class InferencePipeline:
             return {"success": False, "error": f"Failed to load image: {e}", "objects": []}
         
         img_w, img_h = original_img.size
+        
+        # Detect human / face context to eliminate false positive produce hallucinations
+        human_ctx = self._detect_humans_and_clutter(original_img)
         
         # Stage 1: YOLO Detection
         det_results = self.detection_model.predict(
@@ -236,6 +369,10 @@ class InferencePipeline:
                     cls_name = result.names.get(cls_id, f"class_{cls_id}")
                     comm_name = normalize_commodity_name(cls_name)
                     if comm_name is None:
+                        continue
+
+                    # Suppress false positives overlapping human or face
+                    if self._is_overlapping_human([x1, y1, x2, y2], human_ctx["person_boxes"], human_ctx["face_boxes"], img_w, img_h):
                         continue
                     
                     # Crop the detected region
@@ -302,7 +439,11 @@ class InferencePipeline:
             "objects": objects,
             "num_objects": len(objects),
             "inference_time_ms": round(inference_time, 1),
+            "has_human": human_ctx["has_human"],
         }
+        
+        if len(objects) == 0 and human_ctx["has_human"]:
+            result["warning"] = "Human detected! Please place only fresh fruits or vegetables in front of the camera."
         
         if annotate:
             result["annotated_image"] = annotated_img
@@ -361,6 +502,8 @@ class InferencePipeline:
 
         per_view = []
         detected_products = []
+        human_detected_views = []
+        clutter_detected_views = []
 
         if conf_threshold is None:
             conf_threshold = self.config["detection"]["confidence_threshold"]
@@ -380,6 +523,13 @@ class InferencePipeline:
                 raise ValueError(f"Could not open image {idx + 1}: {e}")
 
             w, h = img.size
+
+            # Check human & non-produce context
+            human_ctx = self._detect_humans_and_clutter(img)
+            if human_ctx["has_human"]:
+                human_detected_views.append(idx + 1)
+            if human_ctx["clutter_items"]:
+                clutter_detected_views.extend(human_ctx["clutter_items"])
 
             # Run detection
             det_results = self.detection_model.predict(
@@ -404,6 +554,10 @@ class InferencePipeline:
                     comm_name = normalize_commodity_name(raw_name)
                     if comm_name is not None:
                         conf = float(boxes.conf[b_idx].cpu())
+                        x1, y1, x2, y2 = boxes.xyxy[b_idx].cpu().numpy().astype(int)
+                        # Suppress false positives overlapping human or face
+                        if self._is_overlapping_human([x1, y1, x2, y2], human_ctx["person_boxes"], human_ctx["face_boxes"], w, h):
+                            continue
                         valid_boxes.append((conf, b_idx, comm_name))
 
             if valid_boxes:
@@ -438,6 +592,7 @@ class InferencePipeline:
                 "quality_confidence": round(q_conf, 4),
                 "quality_class": q_class,
                 "bbox": bbox_coords,
+                "has_human": human_ctx["has_human"],
             }
             per_view.append(view_data)
             if detected_name is not None:
@@ -445,52 +600,112 @@ class InferencePipeline:
 
         # Strict validation: MUST be fruits or vegetables alone
         if len(detected_products) == 0:
-            raise ValueError(
-                "No fruit or vegetable detected. Please point the camera at your produce and capture 4 clear photos."
-            )
+            if human_detected_views:
+                raise ValueError("Human detected! Please place only fresh fruits or vegetables in front of the camera.")
+            elif clutter_detected_views:
+                item_name = clutter_detected_views[0]
+                raise ValueError(f"Non-produce item ({item_name}) detected. Please point the camera directly at your fresh produce.")
+            else:
+                raise ValueError("No fruit or vegetable detected. Please point the camera directly at your produce.")
 
-        if len(detected_products) < 2:
-            raise ValueError(
-                "Product could not be identified clearly as a fruit or vegetable. Please point the camera directly at your produce."
-            )
-
-        # Consistency verification
+        # Consistency verification: ensure views agree on primary product
         from collections import Counter
         counts = Counter(detected_products)
         primary_product, most_count = counts.most_common(1)[0]
-        
-        # Check for multiple distinct products detected with high confidence
         distinct_products = set(detected_products)
-        if len(distinct_products) > 1 and len(detected_products) >= 3:
-            conflicts = [p for p in distinct_products if counts[p] >= 2 and p != primary_product]
-            if conflicts or len(distinct_products) >= 3:
-                raise ValueError("Please capture 4 photos of the same fruit or vegetable.")
+
+        # Multiple conflicting products detected with high frequency (e.g. 2 Tomatoes and 2 Apples)
+        conflicts = [p for p in distinct_products if counts[p] >= 2 and p != primary_product]
+        if conflicts or (len(distinct_products) > 2 and len(detected_products) >= 3):
+            raise ValueError("Please capture 4 photos of the same product.")
+
+        if most_count < 2 or len(detected_products) < 2:
+            if human_detected_views:
+                raise ValueError("Human detected in photo! Please point the camera only at your fresh produce.")
+            raise ValueError("Product could not be identified clearly. Please retake the photos.")
 
         consistency_ratio = round(most_count / 4.0, 2)
 
-        # 4-View Feature Fusion:
-        # Conservative formula preventing hidden damage:
-        # S_fused = 0.45*min + 0.35*mean + 0.20*median - rot_penalty - variance_penalty
+        # Reconcile views that missed detection using the primary product consensus
+        valid_scores = [v["quality_score"] for v in per_view if v["quality_score"] > 0]
+        valid_qual_confs = [v["quality_confidence"] for v in per_view if v["quality_confidence"] > 0]
+        valid_det_confs = [v["detection_confidence"] for v in per_view if v["detection_confidence"] > 0]
+
+        if not valid_scores:
+            valid_scores = [50.0]
+        if not valid_qual_confs:
+            valid_qual_confs = [0.85]
+        if not valid_det_confs:
+            valid_det_confs = [0.85]
+
+        avg_valid_score = round(float(np.mean(valid_scores)), 1)
+        avg_valid_qual_conf = round(float(np.mean(valid_qual_confs)), 4)
+        avg_valid_det_conf = round(float(np.mean(valid_det_confs)), 4)
+
+        for v in per_view:
+            if v["bbox"] is None or v["quality_score"] == 0:
+                v["product_detected"] = primary_product
+                v["quality_score"] = avg_valid_score
+                v["quality_confidence"] = avg_valid_qual_conf
+                v["detection_confidence"] = avg_valid_det_conf
+                v["quality_class"] = "fresh" if avg_valid_score >= 50 else "rotten"
+
         scores = [v["quality_score"] for v in per_view]
         det_confs = [v["detection_confidence"] for v in per_view]
         qual_confs = [v["quality_confidence"] for v in per_view]
         rotten_count = sum(1 for v in per_view if v["quality_class"].lower() == "rotten" or v["quality_score"] < 50)
 
+        avg_det_conf = round(float(np.mean(det_confs)), 4)
+        avg_qual_conf = round(float(np.mean(qual_confs)), 4)
+
+
+        fusion_cfg = self.config.get("fusion", {})
+        min_det_conf = fusion_cfg.get("min_detection_confidence", 0.35)
+        min_qual_conf = fusion_cfg.get("min_quality_confidence", 0.40)
+
+        # Low confidence guardrails (Requirement 22)
+        if avg_det_conf < min_det_conf:
+            raise ValueError("Product could not be identified clearly. Please retake the photos.")
+
+        if avg_qual_conf < min_qual_conf:
+            raise ValueError("Quality could not be assessed confidently. Please capture clearer photos.")
+
         min_s = float(np.min(scores))
         mean_s = float(np.mean(scores))
-        median_s = float(np.median(scores))
-        std_s = float(np.std(scores))
+        conf_s = avg_qual_conf * 100.0
+        consist_s = consistency_ratio * 100.0
 
-        base_fused = 0.45 * min_s + 0.35 * mean_s + 0.20 * median_s
-        damage_penalty = rotten_count * 6.0
-        variance_penalty = max(0.0, (std_s - 10.0) * 0.25)
+        weights = fusion_cfg.get("weights", {
+            "mean_score": 0.40,
+            "minimum_score": 0.35,
+            "confidence_score": 0.15,
+            "consistency_score": 0.10,
+        })
+        w_mean = weights.get("mean_score", 0.40)
+        w_min = weights.get("minimum_score", 0.35)
+        w_conf = weights.get("confidence_score", 0.15)
+        w_consist = weights.get("consistency_score", 0.10)
 
-        final_score = max(0.0, min(100.0, base_fused - damage_penalty - variance_penalty))
+        # Conservative 4-View Feature Fusion:
+        # S_fused = (0.40 * mean_score) + (0.35 * minimum_score) + (0.15 * confidence_score) + (0.10 * consistency_score) - rot_penalty
+        fused_raw = (
+            (w_mean * mean_s)
+            + (w_min * min_s)
+            + (w_conf * conf_s)
+            + (w_consist * consist_s)
+        )
+        rot_penalty = rotten_count * fusion_cfg.get("damage_penalty_per_rotten_view", 5.0)
+        final_score = max(0.0, min(100.0, fused_raw - rot_penalty))
         final_score = round(final_score, 1)
 
         grade, grade_desc = score_to_grade(final_score, self.grading_config)
-        avg_det_conf = round(float(np.mean(det_confs)), 4)
-        avg_qual_conf = round(float(np.mean(qual_confs)), 4)
+
+        formula_desc = (
+            f"({w_mean:.2f} × mean_score) + ({w_min:.2f} × minimum_score) + "
+            f"({w_conf:.2f} × confidence_score) + ({w_consist:.2f} × consistency_score)"
+        )
+        if rotten_count > 0:
+            formula_desc += f" - ({rot_penalty:.1f} visible damage penalty)"
 
         return {
             "success": True,
@@ -506,12 +721,12 @@ class InferencePipeline:
                 "score": final_score,
                 "confidence": avg_qual_conf,
                 "fusion_method": "conservative_multi_view",
-                "formula": "0.45*min + 0.35*mean + 0.20*median - damage_penalty - variance_penalty",
+                "formula": formula_desc,
                 "stats": {
                     "min_score": round(min_s, 1),
                     "mean_score": round(mean_s, 1),
-                    "median_score": round(median_s, 1),
-                    "std_dev": round(std_s, 1),
+                    "confidence_score": round(conf_s, 1),
+                    "consistency_score": round(consist_s, 1),
                     "rotten_sides": rotten_count,
                 },
                 "per_view": per_view,

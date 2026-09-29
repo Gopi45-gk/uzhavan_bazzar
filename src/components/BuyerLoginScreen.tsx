@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { MarketStallIllustration } from './illustrations/MarketStallIllustration';
 import { AuthModal } from './AuthModal';
 import { ASSET_IMAGES } from '../constants/assets';
+import { useLanguage } from '../context/LanguageContext';
 
 interface BuyerLoginScreenProps {
   onBack: () => void;
@@ -11,15 +12,9 @@ interface BuyerLoginScreenProps {
 }
 
 export const BuyerLoginScreen: React.FC<BuyerLoginScreenProps> = ({ onBack, onLoginSuccess }) => {
+  const { t } = useLanguage();
   const [modalMode, setModalMode] = useState<'login' | 'register' | null>(null);
   const [imgError, setImgError] = useState(false);
-
-  const handleAuthSuccess = () => {
-    setModalMode(null);
-    if (onLoginSuccess) {
-      onLoginSuccess();
-    }
-  };
 
   return (
     <div
@@ -68,7 +63,7 @@ export const BuyerLoginScreen: React.FC<BuyerLoginScreenProps> = ({ onBack, onLo
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 26, delay: 0.15 }}
-          className="w-full flex flex-col items-center gap-4 pb-12 pt-4"
+          className="w-full flex flex-col items-center gap-5 pb-16 pt-6"
         >
           {/* LOGIN Button */}
           <motion.button
@@ -83,7 +78,7 @@ export const BuyerLoginScreen: React.FC<BuyerLoginScreenProps> = ({ onBack, onLo
               boxShadow: '0 8px 18px -4px rgba(34, 197, 94, 0.4)',
             }}
           >
-            LOGIN
+            {t('login', 'LOGIN')}
           </motion.button>
 
           {/* REGISTER Button */}
@@ -99,17 +94,8 @@ export const BuyerLoginScreen: React.FC<BuyerLoginScreenProps> = ({ onBack, onLo
               boxShadow: '0 8px 18px -4px rgba(34, 197, 94, 0.4)',
             }}
           >
-            REGISTER
+            {t('register', 'REGISTER')}
           </motion.button>
-
-          {/* Quick Enter Direct Buyer Dashboard Link */}
-          <button
-            id="buyer-explore-guest-btn"
-            onClick={onLoginSuccess}
-            className="mt-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline tracking-wide py-1 cursor-pointer"
-          >
-            Browse Market as Guest →
-          </button>
         </motion.div>
       </div>
 
@@ -119,7 +105,12 @@ export const BuyerLoginScreen: React.FC<BuyerLoginScreenProps> = ({ onBack, onLo
           role="buyer"
           mode={modalMode}
           onClose={() => setModalMode(null)}
-          onSuccess={handleAuthSuccess}
+          onSuccess={() => {
+            setModalMode(null);
+            if (onLoginSuccess) {
+              onLoginSuccess();
+            }
+          }}
         />
       )}
     </div>

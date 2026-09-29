@@ -1,0 +1,41 @@
+FROM python:3.10-slim
+
+# Prevent Python from writing .pyc files and buffer stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Install system dependencies needed for OpenCV, PyTorch, and ONNX Runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PyTorch CPU directly first to prevent installing 2.5GB of CUDA packages on CPU VM
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch==2.2.0 torchvision==0.17.0 --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining backend requirements
+COPY ml/requirements.txt /app/ml/requirements.txt
+RUN pip install --no-cache-dir -r ml/requirements.txt
+
+# Copy ML application code, configurations, models, and weights
+COPY ml/ /app/ml/
+COPY models/ /app/models/
+COPY yolov8n.pt /app/yolov8n.pt
+
+# Ensure data persistence directory exists
+RUN mkdir -p /app/ml/data
+
+EXPOSE 8000
+
+# Health check to ensure ML models and API endpoints are loaded and healthy
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start FastAPI ML Server
+CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "ml"]

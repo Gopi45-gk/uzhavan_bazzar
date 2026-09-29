@@ -19,8 +19,17 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms, models
-from torch.amp import autocast, GradScaler
 from pathlib import Path
+try:
+    from torch.amp import autocast, GradScaler
+except ImportError:
+    try:
+        from torch.cuda.amp import autocast, GradScaler
+    except ImportError:
+        autocast = None
+        GradScaler = None
+
+
 
 
 def load_config(config_path="ml/config.yaml"):

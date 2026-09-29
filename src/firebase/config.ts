@@ -4,49 +4,31 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
-// Web app's Firebase configuration provided by the user
 export const firebaseConfig = {
-  apiKey: "AIzaSyC9HzPn-aQCdmESzLgkBqciSNdgHwM0Zv4",
-  authDomain: "uzhavan-bazzar.firebaseapp.com",
-  projectId: "uzhavan-bazzar",
-  storageBucket: "uzhavan-bazzar.firebasestorage.app",
-  messagingSenderId: "210899730862",
-  appId: "1:210899730862:web:d5bd88cdc1d472cf8f883f",
-  measurementId: "G-C948SCW5TJ"
+  apiKey: "AIzaSyCuU1hdw2JXb-CIanD_vvbpGyc1y4KYSXY",
+  authDomain: "uzhavanbazzar.firebaseapp.com",
+  projectId: "uzhavanbazzar",
+  storageBucket: "uzhavanbazzar.firebasestorage.app",
+  messagingSenderId: "257094814305",
+  appId: "1:257094814305:web:2bd773b7774b762afc3820",
+  measurementId: "G-VE5D3DS9TW"
 };
 
-// Initialize Firebase once
+// Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Firebase Authentication instance
+// Firebase Services
 export const auth = getAuth(app);
-
-// Cloud Firestore instance
 export const db = getFirestore(app);
-
-// Firebase Storage instance
 export const storage = getStorage(app);
 
-// Analytics instance (deferred initialization to avoid ERR_NETWORK_CHANGED during startup)
+// Analytics
 export let analytics: any = null;
 if (typeof window !== 'undefined') {
-  // Delay analytics init to let the network stabilize after page load
-  setTimeout(() => {
-    if (navigator.onLine) {
-      isSupported()
-        .then((supported) => {
-          if (supported) {
-            try {
-              analytics = getAnalytics(app);
-            } catch {
-              // Analytics initialization failed silently
-            }
-          }
-        })
-        .catch(() => {
-          // Analytics is optional — no-op
-        });
+  isSupported().then((supported) => {
+    if (supported) {
+      analytics = getAnalytics(app);
     }
-  }, 3000);
+  }).catch(() => {});
 }
 

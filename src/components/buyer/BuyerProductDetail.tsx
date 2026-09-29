@@ -80,14 +80,14 @@ export const BuyerProductDetail: React.FC<BuyerProductDetailProps> = ({
             </span>
             <div className="text-3xl font-black">
               ₹{product.rate}{' '}
-              <span className="text-sm font-medium text-white/80">/ kg</span>
+              <span className="text-sm font-medium text-white/80">/ {t('kgUnit', 'kg')}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full text-amber-400 text-sm font-bold border border-white/10">
             <Star className="w-4 h-4 fill-amber-400" />
             <span>{product.rating}</span>
-            <span className="text-xs text-white/70 font-normal">(48+ reviews)</span>
+            <span className="text-xs text-white/70 font-normal">(48+ {t('reviews', 'reviews')})</span>
           </div>
         </div>
       </div>
@@ -148,7 +148,7 @@ export const BuyerProductDetail: React.FC<BuyerProductDetailProps> = ({
               {t('selectQuantity', 'Select Quantity')}
             </span>
             <span className="text-xs text-neutral-400">
-              Available: {product.quantityAvailable || '200+ kg'}
+              {t('available', 'Available')}: {product.quantityAvailable || '200+ kg'}
             </span>
           </div>
 
@@ -161,7 +161,7 @@ export const BuyerProductDetail: React.FC<BuyerProductDetailProps> = ({
               -
             </button>
             <div className="min-w-[54px] text-center font-black text-neutral-900 text-base sm:text-lg">
-              {quantity} <span className="text-xs font-medium text-neutral-500">kg</span>
+              {quantity} <span className="text-xs font-medium text-neutral-500">{t('kgUnit', 'kg')}</span>
             </div>
             <button
               onClick={() => setQuantity((q) => q + 5)}

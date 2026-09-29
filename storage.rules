@@ -1,25 +1,49 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // Product images:
-    // Stored under product-images/{uid}/{productId}/{fileName}
-    // Read: Public for buyers to view produce photos in marketplace
-    // Write: Strictly restricted to the authenticated farmer whose UID matches the folder
-    match /product-images/{uid}/{productId}/{fileName} {
+    // 1. Farmer Product Images
+    match /productImages/{farmerId}/{productId}/{allPaths=**} {
       allow read: if true;
-      allow write: if isAuthenticated() && request.auth.uid == uid;
-      allow delete: if isAuthenticated() && request.auth.uid == uid;
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
     }
 
-    // Default deny for all other storage paths
-    match /{allPaths=**} {
-      allow read, write: if false;
+    // 2. Cattle & Livestock Images
+    match /cattleImages/{farmerId}/{listingId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Legacy paths for compatibility
+    match /product-images/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /livestock-images/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /produce/{imageId} {
+      allow read: if true;
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /cattle/{imageId} {
+      allow read: if true;
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /profiles/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
     }
   }
 }

@@ -36,9 +36,7 @@ export const normalizePhoneNumber = (raw: string): string => {
   }
   // Extract pure digits
   const cleanDigits = text.replace(/\D/g, '');
-  if (cleanDigits.startsWith('91') && cleanDigits.length >= 12) {
-    return '91+ ' + cleanDigits.slice(2, 12);
-  } else if (cleanDigits.length >= 10) {
+  if (cleanDigits.length >= 10) {
     return cleanDigits.slice(-10);
   }
   return cleanDigits;

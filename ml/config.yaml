@@ -1,13 +1,14 @@
 # Global ML Configuration for Fruit & Vegetable Detection and Quality Grading
 
 paths:
-  fruit_dataset: "/home/gopikrishna/Documents/uzhavan bazzzar/dataset"
-  vegetable_dataset: "/home/gopikrishna/Documents/uzhavan bazzzar/vegetable/Vegetable Images"
-  processed_dir: "/home/gopikrishna/Documents/uzhavan bazzzar/ml/data"
-  reports_dir: "/home/gopikrishna/Documents/uzhavan bazzzar/ml/reports"
-  detection_model_dir: "/home/gopikrishna/Documents/uzhavan bazzzar/models/detection"
-  quality_model_dir: "/home/gopikrishna/Documents/uzhavan bazzzar/models/quality"
-  preprocessing_config: "/home/gopikrishna/Documents/uzhavan bazzzar/models/preprocessing/config.json"
+  fruit_dataset: "dataset"
+  vegetable_dataset: "vegetable/Vegetable Images"
+  processed_dir: "ml/data"
+  reports_dir: "ml/reports"
+  detection_model_dir: "models/detection"
+  quality_model_dir: "models/quality"
+  preprocessing_config: "models/preprocessing/config.json"
+
 
 hardware:
   device: "cuda:0"
@@ -34,24 +35,30 @@ quality:
   confidence_threshold: 0.40
 
 grading:
-  # Score 0 - 100 mapping to Grade A / B / C / D
+  # Score 0 - 100 mapping strictly to Grade A / B / C
   grades:
     A:
       min_score: 90
       max_score: 100
-      description: "Excellent / Fresh"
+      description: "Grade A"
     B:
       min_score: 75
       max_score: 89
-      description: "Good / Standard Market Quality"
+      description: "Grade B"
     C:
-      min_score: 50
-      max_score: 74
-      description: "Average / Minor Surface Blemishes"
-    D:
       min_score: 0
-      max_score: 49
-      description: "Poor / Damaged / Rotten"
+      max_score: 74
+      description: "Grade C"
+
+fusion:
+  weights:
+    mean_score: 0.40
+    minimum_score: 0.35
+    confidence_score: 0.15
+    consistency_score: 0.10
+  damage_penalty_per_rotten_view: 5.0
+  min_detection_confidence: 0.35
+  min_quality_confidence: 0.40
 
 mandi_api:
   base_url: "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
@@ -64,19 +71,14 @@ pricing_rules:
     A:
       min_offset: -5
       max_offset: 0
-      description: "Top Tier: Full market rate to slight discount"
+      description: "Grade A: BASE PRICE - ₹5 to BASE PRICE"
     B:
       min_offset: -10
       max_offset: -3
-      description: "Standard Tier: Moderate discount for standard quality"
+      description: "Grade B: BASE PRICE - ₹10 to BASE PRICE - ₹3"
     C:
       max_offset: -10
-      min_factor: 0.60
-      description: "Economy Tier: Discounted rate for average quality"
-    D:
-      min_factor: 0.30
-      max_factor: 0.50
-      description: "Salvage Tier: Heavily discounted for processing/salvage"
+      description: "Grade C: Below BASE PRICE - ₹10"
   tomato:
     A:
       min_offset: -5
@@ -86,36 +88,24 @@ pricing_rules:
       max_offset: -3
     C:
       max_offset: -10
-      min_factor: 0.60
-    D:
-      min_factor: 0.30
-      max_factor: 0.50
   onion:
     A:
-      min_offset: -6
+      min_offset: -5
       max_offset: 0
     B:
-      min_offset: -12
-      max_offset: -4
+      min_offset: -10
+      max_offset: -3
     C:
-      max_offset: -12
-      min_factor: 0.60
-    D:
-      min_factor: 0.30
-      max_factor: 0.50
+      max_offset: -10
   potato:
     A:
-      min_offset: -4
+      min_offset: -5
       max_offset: 0
     B:
-      min_offset: -8
-      max_offset: -2
+      min_offset: -10
+      max_offset: -3
     C:
-      max_offset: -8
-      min_factor: 0.65
-    D:
-      min_factor: 0.35
-      max_factor: 0.55
+      max_offset: -10
 
 random_seed: 42
 

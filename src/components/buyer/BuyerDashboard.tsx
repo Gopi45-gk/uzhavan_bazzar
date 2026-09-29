@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Clock,
   ChevronRight,
+  X,
 } from 'lucide-react';
 import {
   BuyerFeedProduct,
@@ -35,9 +36,15 @@ import { BuyerCheckout } from './BuyerCheckout';
 import { BuyerPaymentPartnersScreen, BuyerSimulatedPaymentScreen } from './BuyerPaymentScreens';
 import { BuyerLiveTracker } from './BuyerLiveTracker';
 import { BuyerProfileModal } from './BuyerProfileModal';
+import { BulkOrderModal } from './BulkOrderModal';
 import { useLanguage } from '../../context/LanguageContext';
 import { LanguageCode } from '../../types';
-import { productService, ProductDocument } from '../../services/productService';
+import { productService, ProductListing } from '../../services/productService';
+import { cattleService, CattleItem } from '../../services/cattleService';
+import { orderService, OrderDocument } from '../../services/orderService';
+import { authService } from '../../services/authService';
+import { reviewService } from '../../services/reviewService';
+import { bulkOrderService, BulkOrder } from '../../services/exportService';
 
 interface BuyerDashboardProps {
   onBackToRole: () => void;
@@ -57,64 +64,186 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'market' | 'delivery' | 'account'>('market');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showLangDropdown, setShowLangDropdown] = useState(false);
+  const [showBulkOrderModal, setShowBulkOrderModal] = useState(false);
 
-  // Data & Order state
-  const [products, setProducts] = useState<BuyerFeedProduct[]>(BUYER_FEED_PRODUCTS);
+  // Review Modal state (Section 17, 18, 19)
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewOrder, setReviewOrder] = useState<UserOrder | null>(null);
+  const [ratingScore, setRatingScore] = useState<number>(5);
+  const [reviewText, setReviewText] = useState<string>('');
+  const [reviewSubmitted, setReviewSubmitted] = useState<boolean>(false);
+
+  // Data & Order state from Firebase (Section 21 & 24)
+  const [products, setProducts] = useState<BuyerFeedProduct[]>([]);
+  const [cattleProducts, setCattleProducts] = useState<BuyerFeedProduct[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<BuyerFeedProduct | null>(null);
   const [orderQuantity, setOrderQuantity] = useState<number>(10);
   const [paymentPartner, setPaymentPartner] = useState<'GPay' | 'PhonePe' | 'Paytm'>('GPay');
-  const [orders, setOrders] = useState<UserOrder[]>(BUYER_USER_ORDERS);
+  const [orders, setOrders] = useState<UserOrder[]>([]);
+  const [bulkOrders, setBulkOrders] = useState<BulkOrder[]>([]);
 
-  // Search & Filter state
+  // Search & Filter state (Requirement 8)
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedGrade, setSelectedGrade] = useState<string>('All');
 
-  // Attempt to load any live farmer products posted in Firestore and merge with catalog
+  // Realtime subscription to active products from Firestore /products (Section 21 & 25)
   useEffect(() => {
-    let isMounted = true;
-    const loadFirestoreProducts = async () => {
-      try {
-        const firestoreList = await productService.getActiveProducts();
-        if (firestoreList && firestoreList.length > 0 && isMounted) {
-          const formatted: BuyerFeedProduct[] = firestoreList.map((item: ProductDocument, idx) => ({
-            id: item.id || `live-${idx}`,
-            productName: item.productName || item.aiDetection?.detectedName || 'Farm Produce',
-            grade: (item.grade || item.aiGrading?.grade || 'A').toUpperCase(),
-            productImg:
-              item.images && item.images.length > 0
-                ? item.images[0]
-                : BUYER_FEED_PRODUCTS[idx % BUYER_FEED_PRODUCTS.length].productImg,
+    const unsubProducts = productService.subscribeProducts(
+      (items: ProductListing[]) => {
+        const activeItems = items.filter(
+          (it) => it.status !== 'deleted' && String(it.status).toLowerCase() === 'active'
+        );
+
+        const formatted: BuyerFeedProduct[] = activeItems.map((item, idx) => {
+          const primaryImg =
+            (item.imageUrls && item.imageUrls.length > 0 ? item.imageUrls[0] : null) ||
+            (item.images && item.images.length > 0 ? item.images[0] : null) ||
+            'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80';
+
+          return {
+            id: item.productId || item.id || `live-${idx}`,
+            farmerId: item.farmerId || 'farmer-default-murugan',
+            productName: item.productName || item.name || 'Farm Produce',
+            grade: (item.grade || 'A').toUpperCase(),
+            productImg: primaryImg,
             farmerName: item.farmerName || 'Registered Farmer',
             location: item.location || 'Tamil Nadu',
-            rate: item.mandiPrice || item.recommendedPriceMin || 35,
-            rating: 4.8,
-            description: `Freshly graded Grade-${item.grade || 'A'} produce posted live by ${item.farmerName}. Quality verified at ${item.qualityScore || 92}%.`,
-            coords: { lat: 11.0168, lng: 76.9558 },
-            quantityAvailable: `${item.quantityKg || 100} kg`,
-          }));
+            rate: Number(item.optimizedPriceMax || item.marketPrice || 38),
+            rating: item.rating || 4.9,
+            description:
+              item.description ||
+              `Fresh Grade-${item.grade || 'A'} ${item.productName || 'produce'} posted live by ${item.farmerName}.`,
+            coords: {
+              lat: Number(item.latitude) || 11.0168,
+              lng: Number(item.longitude) || 76.9558,
+            },
+            quantityAvailable: `${item.quantity || 100} ${item.unit || 'kg'}`,
+            unit: item.unit || 'kg',
+            category: item.category || 'Vegetables',
+            freshnessScore: Number(item.freshnessScore) || (item.grade === 'A' ? 96 : item.grade === 'B' ? 84 : 72),
+          };
+        });
 
-          // Put live products first, followed by default catalog
-          setProducts([...formatted, ...BUYER_FEED_PRODUCTS]);
-        }
-      } catch (err) {
-        // Fallback gracefully to catalog
-      }
-    };
+        setProducts(formatted);
+      },
+      { activeOnly: true }
+    );
 
-    loadFirestoreProducts();
+    // Realtime subscription to cattle & livestock listings from Firestore /cattleListings (Requirement 12)
+    const unsubCattle = cattleService.subscribeCattle(
+      (cattleItems: CattleItem[]) => {
+        const activeCattle = cattleItems.filter(
+          (c) => c.status !== 'deleted' && c.status !== 'sold_out' && c.status !== 'inactive'
+        );
+
+        const formattedCattle: BuyerFeedProduct[] = activeCattle.map((c, idx) => {
+          const primaryImg =
+            c.imageUrl ||
+            (c.imageUrls && c.imageUrls.length > 0 ? c.imageUrls[0] : null) ||
+            'https://www.image2url.com/r2/default/images/1790515781753-c4236b67-e877-40a6-851c-b591799d290e.png';
+
+          return {
+            id: c.id || `cattle-${idx}`,
+            farmerId: c.farmerId || 'farmer-default-murugan',
+            productName: c.title,
+            grade: 'A',
+            productImg: primaryImg,
+            farmerName: c.farmer || 'Verified Farmer',
+            location: c.location || 'Tamil Nadu',
+            rate: parseFloat(String(c.price).replace(/[^0-9.]/g, '')) || 500,
+            rating: 4.9,
+            description: `${c.breed || c.categoryLabel} • ${c.specs?.join(' • ') || ''}`,
+            coords: {
+              lat: Number(c.latitude) || 11.0168,
+              lng: Number(c.longitude) || 76.9558,
+            },
+            quantityAvailable: c.availableQty || `${c.quantity || 1} available`,
+            unit: c.unit || (c.category === 'milk' ? 'litre' : 'unit'),
+            category: 'Livestock',
+            freshnessScore: 98,
+          };
+        });
+
+        setCattleProducts(formattedCattle);
+      },
+      { activeOnly: true }
+    );
+
+    // Realtime subscription to buyer orders from Firestore /orders (Section 24 & 25)
+    const currentSession = authService.getCurrentSession();
+    const buyerUid = currentSession?.uid || 'buyer-demo';
+
+    const unsubOrders = orderService.subscribeOrders((orderDocs: OrderDocument[]) => {
+      const formattedOrders: UserOrder[] = orderDocs.map((o) => ({
+        id: o.orderId || o.id,
+        itemKey: 'freshProduce',
+        itemName: o.productName,
+        productName: o.productName,
+        productImg:
+          products.find((p) => String(p.id) === o.productId)?.productImg ||
+          'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80',
+        date: o.time || (o.createdAt ? 'Recently' : 'Today'),
+        amount: o.total || `₹${o.totalAmount.toLocaleString()}`,
+        quantity: `${o.quantity} ${o.unit || 'kg'}`,
+        farmerId: o.farmerId,
+        farmerName: o.farmerName,
+        productId: o.productId,
+        orderStatus: o.orderStatus,
+        statusKey:
+          o.orderStatus === 'delivered'
+            ? 'delivered'
+            : o.orderStatus === 'cancelled'
+            ? 'cancelled'
+            : 'ongoing',
+      }));
+      setOrders(formattedOrders);
+    });
+
+    // Realtime subscription to buyer bulk orders
+    const unsubBulk = bulkOrderService.subscribeBuyerBulkOrders(buyerUid, (items) => {
+      setBulkOrders(items);
+    });
+
     return () => {
-      isMounted = false;
+      unsubProducts();
+      unsubCattle();
+      unsubOrders();
+      unsubBulk();
     };
   }, []);
 
-  // Filter products by search term and grade
-  const filteredProducts = products.filter((item) => {
+  // Filter products by search term, category, and grade (Requirement 8)
+  const allMarketProducts = [...products, ...cattleProducts];
+  const filteredProducts = allMarketProducts.filter((item) => {
+    const sTerm = searchTerm.toLowerCase().trim();
     const matchesSearch =
-      item.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.farmerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchTerm.toLowerCase());
+      !sTerm ||
+      item.productName.toLowerCase().includes(sTerm) ||
+      item.farmerName.toLowerCase().includes(sTerm) ||
+      item.location.toLowerCase().includes(sTerm) ||
+      (item.category && item.category.toLowerCase().includes(sTerm)) ||
+      (item.grade && `grade ${item.grade}`.toLowerCase().includes(sTerm));
+
+    const matchesCategory =
+      selectedCategory === 'All' ||
+      (selectedCategory === 'Vegetables' &&
+        (!item.category || item.category.toLowerCase().includes('veg'))) ||
+      (selectedCategory === 'Fruits' &&
+        item.category &&
+        item.category.toLowerCase().includes('fruit')) ||
+      (selectedCategory === 'Grains' &&
+        item.category &&
+        item.category.toLowerCase().includes('grain')) ||
+      (selectedCategory === 'Livestock' &&
+        item.category &&
+        ['livestock', 'cattle', 'cow', 'hens', 'goat', 'eggs', 'milk'].includes(
+          item.category.toLowerCase()
+        ));
+
     const matchesGrade = selectedGrade === 'All' || item.grade === selectedGrade;
-    return matchesSearch && matchesGrade;
+
+    return matchesSearch && matchesCategory && matchesGrade;
   });
 
   // Handle product click
@@ -134,19 +263,54 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     setView('paymentPartners');
   };
 
-  // Handle cash on delivery confirm
-  const handleConfirmCod = () => {
+  // Handle cash on delivery confirm -> Save to Firebase Firestore (Section 12 & 14)
+  const handleConfirmCod = async () => {
     if (selectedProduct) {
-      const newOrder: UserOrder = {
-        id: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-        itemKey: 'freshProduce',
-        productName: selectedProduct.productName,
-        productImg: selectedProduct.productImg,
-        date: new Date().toISOString().split('T')[0],
-        amount: `₹${(selectedProduct.rate * orderQuantity + 120).toLocaleString()}`,
-        statusKey: 'ongoing',
-      };
-      setOrders([newOrder, ...orders]);
+      const currentSession = authService.getCurrentSession();
+      const buyerUid = currentSession?.uid || 'buyer-demo';
+      const buyerName = currentSession?.name || buyerData?.fullName || 'Verified Buyer';
+      const buyerMobile = currentSession?.phoneNumber || buyerData?.mobile || '+91 98765 43210';
+      const buyerAddress = currentSession?.location || buyerData?.location || 'Coimbatore, Tamil Nadu';
+      const subtotalAmt = selectedProduct.rate * orderQuantity;
+      const totalAmt = subtotalAmt + 120;
+
+      try {
+        await orderService.createOrder(
+          {
+            buyerId: buyerUid,
+            buyerName: buyerName,
+            buyerMobile: buyerMobile,
+            farmerId: selectedProduct.farmerId || 'farmer-default-murugan',
+            farmerName: selectedProduct.farmerName || 'Murugan S.',
+            productId: String(selectedProduct.id),
+            productName: selectedProduct.productName,
+            quantity: orderQuantity,
+            unit: selectedProduct.unit || 'kg',
+            pricePerUnit: selectedProduct.rate,
+            subtotal: subtotalAmt,
+            deliveryCharge: 120,
+            totalAmount: totalAmt,
+            deliveryAddress: buyerAddress,
+            paymentMethod: 'Cash on Delivery (COD)',
+            paymentStatus: 'pending',
+            orderStatus: 'placed',
+            transportOption: 'Farmer Direct Delivery',
+          },
+          [
+            {
+              productId: String(selectedProduct.id),
+              productName: selectedProduct.productName,
+              farmerId: selectedProduct.farmerId || 'farmer-default-murugan',
+              quantity: orderQuantity,
+              unit: selectedProduct.unit || 'kg',
+              price: selectedProduct.rate,
+              subtotal: subtotalAmt,
+            },
+          ]
+        );
+      } catch (err) {
+        console.warn('Error saving COD order to Firestore:', err);
+      }
     }
     setView('liveMapTracker');
   };
@@ -157,21 +321,84 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     setView('simulatedPayment');
   };
 
-  // Handle payment success
-  const handlePaymentSuccess = () => {
+  // Handle payment success -> Save to Firebase Firestore (Section 12 & 14)
+  const handlePaymentSuccess = async () => {
     if (selectedProduct) {
-      const newOrder: UserOrder = {
-        id: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-        itemKey: 'freshProduce',
-        productName: selectedProduct.productName,
-        productImg: selectedProduct.productImg,
-        date: new Date().toISOString().split('T')[0],
-        amount: `₹${(selectedProduct.rate * orderQuantity + 120).toLocaleString()}`,
-        statusKey: 'ongoing',
-      };
-      setOrders([newOrder, ...orders]);
+      const currentSession = authService.getCurrentSession();
+      const buyerUid = currentSession?.uid || 'buyer-demo';
+      const buyerName = currentSession?.name || buyerData?.fullName || 'Verified Buyer';
+      const buyerMobile = currentSession?.phoneNumber || buyerData?.mobile || '+91 98765 43210';
+      const buyerAddress = currentSession?.location || buyerData?.location || 'Coimbatore, Tamil Nadu';
+      const subtotalAmt = selectedProduct.rate * orderQuantity;
+      const totalAmt = subtotalAmt + 120;
+
+      try {
+        await orderService.createOrder(
+          {
+            buyerId: buyerUid,
+            buyerName: buyerName,
+            buyerMobile: buyerMobile,
+            farmerId: selectedProduct.farmerId || 'farmer-default-murugan',
+            farmerName: selectedProduct.farmerName || 'Murugan S.',
+            productId: String(selectedProduct.id),
+            productName: selectedProduct.productName,
+            quantity: orderQuantity,
+            unit: selectedProduct.unit || 'kg',
+            pricePerUnit: selectedProduct.rate,
+            subtotal: subtotalAmt,
+            deliveryCharge: 120,
+            totalAmount: totalAmt,
+            deliveryAddress: buyerAddress,
+            paymentMethod: `UPI (${paymentPartner})`,
+            paymentStatus: 'completed',
+            orderStatus: 'confirmed',
+            transportOption: 'Farmer Direct Delivery',
+          },
+          [
+            {
+              productId: String(selectedProduct.id),
+              productName: selectedProduct.productName,
+              farmerId: selectedProduct.farmerId || 'farmer-default-murugan',
+              quantity: orderQuantity,
+              unit: selectedProduct.unit || 'kg',
+              price: selectedProduct.rate,
+              subtotal: subtotalAmt,
+            },
+          ]
+        );
+      } catch (err) {
+        console.warn('Error saving UPI order to Firestore:', err);
+      }
     }
     setView('liveMapTracker');
+  };
+
+  // Handle Review Submission to Firestore reviews/{reviewId} (Section 17)
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewOrder) return;
+    const currentSession = authService.getCurrentSession();
+    try {
+      await reviewService.createReview({
+        buyerId: currentSession?.uid || 'buyer-demo',
+        buyerName: currentSession?.name || buyerData?.fullName || 'Verified Buyer',
+        farmerId: reviewOrder.farmerId || 'farmer-default-murugan',
+        productId: reviewOrder.productId || '',
+        productName: reviewOrder.productName || '',
+        orderId: reviewOrder.id,
+        rating: ratingScore,
+        reviewText: reviewText.trim() || 'Verified quality produce delivered fresh from farm!',
+      });
+      setReviewSubmitted(true);
+      setTimeout(() => {
+        setReviewSubmitted(false);
+        setShowReviewModal(false);
+        setReviewOrder(null);
+        setReviewText('');
+      }, 1400);
+    } catch (err) {
+      console.warn('Review save error:', err);
+    }
   };
 
   // Language options
@@ -179,9 +406,9 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     { code: 'ta', name: 'தமிழ்' },
     { code: 'en', name: 'English' },
     { code: 'te', name: 'తెలుగు' },
-    { code: 'ml', name: 'മലയാളം' },
     { code: 'kn', name: 'ಕನ್ನಡ' },
-    { code: 'hi', name: 'हिंदी' },
+    { code: 'ml', name: 'മലയാളം' },
+    { code: 'hi', name: 'हिन्दी' },
   ];
 
   // Helper for trend icon
@@ -364,19 +591,42 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
               </div>
             </div>
 
+            {/* Category Filter Pills (Requirement 8) */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {[
+                { key: 'All', label: t('allCategories', 'All') },
+                { key: 'Vegetables', label: t('vegetables', 'Vegetables') },
+                { key: 'Fruits', label: t('fruits', 'Fruits') },
+                { key: 'Grains', label: t('grains', 'Grains') },
+                { key: 'Livestock', label: t('livestock', 'Livestock') },
+              ].map((cat) => (
+                <button
+                  key={cat.key}
+                  onClick={() => setSelectedCategory(cat.key)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    selectedCategory === cat.key
+                      ? 'bg-neutral-900 text-white shadow-xs'
+                      : 'bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
             {/* Grade Filter Pill Buttons matching GitHub Repo */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
               {['All', 'A', 'B', 'C'].map((grade) => (
                 <button
                   key={grade}
                   onClick={() => setSelectedGrade(grade)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     selectedGrade === grade
-                      ? 'bg-emerald-700 text-white shadow-sm'
+                      ? 'bg-emerald-700 text-white shadow-xs'
                       : 'bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50'
                   }`}
                 >
-                  {grade === 'All' ? t('allGrades', 'All Grades') : `Grade ${grade}`}
+                  {grade === 'All' ? t('allGrades', 'All Grades') : `${t('grade', 'Grade')} ${grade}`}
                 </button>
               ))}
             </div>
@@ -388,7 +638,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   {t('sales', 'Direct Fresh Harvest')}
                 </h2>
                 <span className="text-xs text-neutral-500 font-semibold">
-                  {filteredProducts.length} items available
+                  {filteredProducts.length} {t('itemsAvailable', 'items available')}
                 </span>
               </div>
 
@@ -419,12 +669,12 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                               : 'bg-rose-500'
                           }`}
                         >
-                          Grade {product.grade}
+                          {t('grade', 'Grade')} {product.grade}
                         </div>
 
                         {/* Rating Badge */}
                         <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-xs rounded-full px-2 py-0.5 flex items-center gap-0.5 shadow-xs">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                           <span className="text-[10px] font-bold text-neutral-800">
                             {product.rating}
                           </span>
@@ -440,15 +690,25 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           <p className="text-[11px] text-neutral-500 truncate mt-0.5">
                             {product.farmerName} • {product.location.split(',')[0]}
                           </p>
+
+                          {/* Freshness & Available Quantity (Requirement 7) */}
+                          <div className="flex items-center justify-between text-[11px] text-neutral-600 mt-1.5 font-semibold">
+                            <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded-md text-[10px]">
+                              {product.freshnessScore || (product.grade === 'A' ? 96 : product.grade === 'B' ? 84 : 72)}% Fresh
+                            </span>
+                            <span className="text-neutral-500 text-[10px] truncate max-w-[55%] text-right">
+                              {product.quantityAvailable}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="mt-2.5 pt-2 border-t border-neutral-100 flex items-baseline justify-between">
                           <span className="text-sm sm:text-base font-black text-emerald-700">
                             ₹{product.rate}{' '}
-                            <span className="text-[10px] font-normal text-neutral-500">/ kg</span>
+                            <span className="text-[10px] font-normal text-neutral-500">/ {product.unit || t('kgUnit', 'kg')}</span>
                           </span>
                           <span className="text-[10px] font-bold text-neutral-400 uppercase">
-                            Buy Now →
+                            {t('buyNow', 'Buy Now')} →
                           </span>
                         </div>
                       </div>
@@ -458,20 +718,44 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
               ) : (
                 <div className="bg-white rounded-2xl p-10 text-center border border-neutral-200">
                   <p className="text-sm font-semibold text-neutral-500">
-                    No farm produce matches "{searchTerm}" with Grade {selectedGrade}.
+                    {t('noListingsYet', 'No farm produce found')}
                   </p>
                   <button
                     onClick={() => {
                       setSearchTerm('');
+                      setSelectedCategory('All');
                       setSelectedGrade('All');
                     }}
-                    className="mt-3 text-xs font-bold text-emerald-600 hover:underline"
+                    className="mt-3 text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
                   >
-                    Reset filters
+                    {t('resetFilters', 'Reset filters')}
                   </button>
                 </div>
               )}
             </div>
+
+            {/* Request Bulk Supply Card */}
+            <motion.div
+              whileHover={{ y: -2, scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowBulkOrderModal(true)}
+              className="bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-2xl p-4 shadow-md cursor-pointer flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center">
+                  <ShoppingBag className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">
+                    {t('requestBulkSupply', 'Request Bulk Supply')}
+                  </h3>
+                  <p className="text-[11px] text-emerald-100">
+                    {t('bulkOrderDesc', 'For restaurants, shops & wholesale buyers')}
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-white/80 group-hover:translate-x-1 transition-transform" />
+            </motion.div>
           </div>
         )}
 
@@ -509,7 +793,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                             {order.productName || 'Fresh Organic Tomatoes'}
                           </span>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                            On the Way
+                            {t('statusInTransit', 'On the Way')}
                           </span>
                         </div>
                         <p className="text-xs text-neutral-400 mt-0.5">
@@ -531,15 +815,15 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             ) : (
               <div className="bg-white rounded-2xl p-8 text-center border border-neutral-200">
                 <Truck className="w-10 h-10 text-neutral-300 mx-auto mb-2" />
-                <p className="font-bold text-neutral-700">No Ongoing Deliveries</p>
+                <p className="font-bold text-neutral-700">{t('noOngoingDeliveries', 'No Ongoing Deliveries')}</p>
                 <p className="text-xs text-neutral-400 mt-1">
-                  Orders you confirm from the market will appear here for live tracking.
+                  {t('browseMarket', 'Orders you confirm from the market will appear here for live tracking.')}
                 </p>
                 <button
                   onClick={() => setActiveTab('market')}
                   className="mt-4 px-5 py-2.5 rounded-full bg-emerald-600 text-white text-xs font-bold"
                 >
-                  Browse Market
+                  {t('browseMarket', 'Browse Market')}
                 </button>
               </div>
             )}
@@ -580,21 +864,119 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                       </p>
                     </div>
 
-                    <div className="text-right">
-                      <span className="font-black text-neutral-900 text-sm block">
-                        {order.amount}
-                      </span>
-                      <span
-                        className={`text-[11px] font-bold ${
-                          order.statusKey === 'delivered' ? 'text-emerald-600' : 'text-amber-600'
-                        }`}
+                    <div className="text-right flex items-center gap-2.5">
+                      <div>
+                        <span className="font-black text-neutral-900 text-sm block">
+                          {order.amount}
+                        </span>
+                        <span
+                          className={`text-[11px] font-bold ${
+                            order.statusKey === 'delivered' ? 'text-emerald-600' : 'text-amber-600'
+                          }`}
+                        >
+                          {order.statusKey === 'delivered' ? `✓ ${t('statusDelivered', 'Delivered')}` : `⏳ ${t('statusInTransit', 'In Transit')}`}
+                        </span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReviewOrder(order);
+                          setShowReviewModal(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                        title="Rate & Review in Firebase"
                       >
-                        {order.statusKey === 'delivered' ? '✓ Delivered' : '⏳ In Transit'}
-                      </span>
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                        <span>{t('review', 'Review')}</span>
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Bulk Order Requests */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-black text-neutral-900 tracking-tight">
+                  {t('myBulkOrders', 'Bulk Supply Requests')}
+                </h2>
+                <button
+                  onClick={() => setShowBulkOrderModal(true)}
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>+ {t('requestBulkSupply', 'Request Bulk Supply')}</span>
+                </button>
+              </div>
+              {bulkOrders.length > 0 ? (
+                <div className="space-y-3">
+                  {bulkOrders.map((order) => {
+                    const getStatusBadge = (status: string) => {
+                      switch (status) {
+                        case 'pending':
+                          return { bg: 'bg-amber-100 text-amber-800', label: t('statusPending', 'Pending') };
+                        case 'accepted':
+                          return { bg: 'bg-emerald-100 text-emerald-800', label: t('statusAccepted', 'Accepted') };
+                        case 'rejected':
+                          return { bg: 'bg-rose-100 text-rose-800', label: t('statusRejected', 'Rejected') };
+                        case 'processing':
+                          return { bg: 'bg-blue-100 text-blue-800', label: t('statusProcessing', 'Processing') };
+                        case 'ready':
+                          return { bg: 'bg-indigo-100 text-indigo-800', label: t('statusReady', 'Ready') };
+                        case 'delivered':
+                          return { bg: 'bg-emerald-100 text-emerald-800', label: t('statusDelivered', 'Delivered') };
+                        case 'cancelled':
+                          return { bg: 'bg-neutral-100 text-neutral-700', label: t('statusCancelled', 'Cancelled') };
+                        default:
+                          return { bg: 'bg-neutral-100 text-neutral-700', label: status };
+                      }
+                    };
+                    const badge = getStatusBadge(order.status);
+                    return (
+                      <div
+                        key={order.id}
+                        className="bg-white rounded-2xl p-4 shadow-xs border border-neutral-200/80 flex flex-col gap-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <ShoppingBag className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <h4 className="font-bold text-neutral-900 text-sm">
+                              {order.productName}
+                            </h4>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.bg}`}>
+                            {badge.label}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 text-xs text-neutral-600">
+                          <div>
+                            <span className="text-neutral-400 font-medium">{t('farmer', 'Farmer')}:</span>{' '}
+                            <span className="font-semibold text-neutral-800">{order.farmerName}</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-400 font-medium">{t('requiredQuantity', 'Qty')}:</span>{' '}
+                            <span className="font-semibold text-neutral-800">{order.requestedQuantity} {order.unit}</span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-neutral-400 font-medium">{t('neededBy', 'Needed By')}:</span>{' '}
+                            <span className="font-semibold text-neutral-800">{order.neededBy}</span>
+                          </div>
+                        </div>
+                        {order.notes && (
+                          <p className="text-[11px] text-neutral-500 italic bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-100">
+                            "{order.notes}"
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl p-5 text-center border border-neutral-200/80">
+                  <p className="text-xs text-neutral-400">{t('noBulkOrders', 'No bulk requests submitted yet')}</p>
+                </div>
+              )}
             </div>
 
             {/* Financial Transactions matching GitHub Repo */}
@@ -697,6 +1079,114 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           onLogout={onBackToRole}
         />
       )}
+
+      {/* Interactive Order & Product Review Modal (Section 17, 18, 19) */}
+      <AnimatePresence>
+        {showReviewModal && reviewOrder && (
+          <div
+            id="buyer-review-modal-overlay"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+            onClick={() => setShowReviewModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-neutral-100 relative"
+            >
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="absolute top-4 right-4 p-1.5 rounded-full text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center mb-4">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                  {t('writeReview', 'Verified Order Review')}
+                </span>
+                <h3 className="text-lg font-black text-neutral-900 mt-2">
+                  {t('yourRating', 'Rate')} {reviewOrder.productName || 'Produce'}
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Farmer: {reviewOrder.farmerName || 'Registered Farmer'} • Order: {reviewOrder.id}
+                </p>
+              </div>
+
+              {reviewSubmitted ? (
+                <div className="py-6 flex flex-col items-center text-center">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <h4 className="font-bold text-neutral-800">{t('reviewSubmitted', 'Review Submitted!')}</h4>
+                  <p className="text-xs text-neutral-500 mt-1">{t('reviewSubmitted', 'Saved to Firebase reviews collection.')}</p>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitReview} className="space-y-4">
+                  {/* Star Rating Selection */}
+                  <div className="flex justify-center items-center gap-2 py-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        type="button"
+                        key={star}
+                        onClick={() => setRatingScore(star)}
+                        className="p-1 text-2xl transition-transform hover:scale-125 focus:outline-none cursor-pointer"
+                      >
+                        <Star
+                          className={`w-7 h-7 ${
+                            star <= ratingScore
+                              ? 'fill-amber-400 text-amber-500'
+                              : 'text-neutral-300'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-center text-xs font-bold text-neutral-600">
+                    {ratingScore === 5
+                      ? '⭐⭐⭐⭐⭐ Excellent Freshness'
+                      : ratingScore === 4
+                      ? '⭐⭐⭐⭐ Very Good Quality'
+                      : ratingScore === 3
+                      ? '⭐⭐⭐ Average'
+                      : ratingScore === 2
+                      ? '⭐⭐ Below Expectations'
+                      : '⭐ Poor Quality'}
+                  </p>
+
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1">
+                      {t('yourReview', 'Your Feedback')}
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={reviewText}
+                      onChange={(e) => setReviewText(e.target.value)}
+                      placeholder="Share your experience with the produce freshness, taste, and farm delivery..."
+                      className="w-full p-3 rounded-xl border border-neutral-300 text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-2xl bg-[#22C55E] hover:bg-[#16A34A] text-black font-extrabold text-sm transition-colors cursor-pointer"
+                  >
+                    {t('submitReview', 'Submit Review')}
+                  </button>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* --- BULK ORDER MODAL --- */}
+      <BulkOrderModal
+        open={showBulkOrderModal}
+        onClose={() => setShowBulkOrderModal(false)}
+      />
     </div>
   );
 };

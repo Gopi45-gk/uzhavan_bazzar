@@ -123,7 +123,7 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
     const farmMarker = L.marker(farmCoords, { icon: farmIcon }).addTo(map);
     farmMarker.bindPopup(`
       <div style="font-family:sans-serif; padding:4px;">
-        <strong style="color:#047857;">🌱 Farm Field Harvest</strong><br/>
+        <strong style="color:#047857;">🌱 ${t('farmFieldHarvest', 'Farm Field Harvest')}</strong><br/>
         <span style="font-size:12px; color:#4b5563;">${product.farmerName}</span><br/>
         <span style="font-size:11px; color:#6b7280;">${product.location}</span>
       </div>
@@ -133,8 +133,8 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
     const buyerMarker = L.marker(buyerHubCoords, { icon: buyerHubIcon }).addTo(map);
     buyerMarker.bindPopup(`
       <div style="font-family:sans-serif; padding:4px;">
-        <strong style="color:#d97706;">🏠 You (Delivery Hub)</strong><br/>
-        <span style="font-size:12px; color:#4b5563;">Doorstep Drop-off</span>
+        <strong style="color:#d97706;">🏠 ${t('deliveryHub', 'Delivery Hub')}</strong><br/>
+        <span style="font-size:12px; color:#4b5563;">${t('doorstepDropoff', 'Doorstep Drop-off')}</span>
       </div>
     `);
 
@@ -287,7 +287,7 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
             title="Locate Delivery Vehicle"
           >
             <Navigation className="w-4 h-4 text-emerald-600" />
-            <span className="hidden sm:inline">Track Truck</span>
+            <span className="hidden sm:inline">{t('trackOrder', 'Track Truck')}</span>
           </button>
           <button
             onClick={handleViewFullRoute}
@@ -295,7 +295,7 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
             title="Fit Route to Screen"
           >
             <RefreshCw className="w-4 h-4 text-neutral-500" />
-            <span className="hidden sm:inline">Full Route</span>
+            <span className="hidden sm:inline">{t('trackLiveMap', 'Full Route')}</span>
           </button>
         </div>
 
@@ -307,17 +307,17 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
               <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
             </span>
             <span className="font-extrabold text-emerald-800 uppercase tracking-wider text-[11px] sm:text-xs">
-              Out for Delivery
+              {t('outForDelivery', 'Out for Delivery')}
             </span>
             <span className="text-neutral-300">|</span>
             <span className="text-neutral-600 hidden sm:inline font-medium">
-              Speed: <strong className="text-neutral-800">{currentSpeed} km/h</strong>
+              {t('speed', 'Speed')}: <strong className="text-neutral-800">{currentSpeed} km/h</strong>
             </span>
           </div>
 
           <div className="flex items-center gap-1.5 text-neutral-700 font-bold">
             <Clock className="w-4 h-4 text-amber-500" />
-            <span>ETA: ~{etaMinutes} mins</span>
+            <span>{t('eta', 'ETA')}: ~{etaMinutes} mins</span>
           </div>
         </div>
       </div>
@@ -369,7 +369,7 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
         {/* Real-time Delivery Milestones */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-200/80 space-y-4">
           <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
-            Delivery Milestones
+            {t('deliveryMilestones', 'Delivery Milestones')}
           </h4>
 
           <div className="space-y-4 relative">
@@ -397,9 +397,9 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
                 <CheckCircle2 className="w-4 h-4" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-neutral-900">AI Quality Inspection Passed</p>
+                <p className="text-sm font-bold text-neutral-900">{t('aiGradedProduce', 'AI Quality Inspection Passed')}</p>
                 <p className="text-xs text-neutral-500">
-                  Graded {product.grade} quality verified by Uzhavan Vision
+                  {t('grade', 'Grade')} {product.grade}
                 </p>
               </div>
             </div>
@@ -413,9 +413,9 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
                 </span>
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-emerald-800">In Transit via Highway NH-44</p>
+                <p className="text-sm font-bold text-emerald-800">{t('statusInTransit', 'In Transit')}</p>
                 <p className="text-xs text-neutral-500">
-                  Live GPS tracking active on {driver.vehicleModel}
+                  {driver.vehicleModel}
                 </p>
               </div>
             </div>
@@ -426,8 +426,8 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
                 <Clock className="w-4 h-4" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-neutral-400">Delivery at Doorstep</p>
-                <p className="text-xs text-neutral-400">Direct contactless farm handoff</p>
+                <p className="text-sm font-bold text-neutral-400">{t('deliveryAtDoorstep', 'Delivery at Doorstep')}</p>
+                <p className="text-xs text-neutral-400">{t('doorstepDropoff', 'Doorstep Drop-off')}</p>
               </div>
             </div>
           </div>
@@ -438,7 +438,7 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
           onClick={onBack}
           className="w-full py-3.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl font-bold text-sm shadow-md transition cursor-pointer"
         >
-          Return to Buyer Market
+          {t('browseMarket', 'Return to Buyer Market')}
         </button>
       </div>
     </motion.div>

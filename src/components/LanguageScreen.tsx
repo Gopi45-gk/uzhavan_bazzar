@@ -47,7 +47,7 @@ const LANGUAGES: LanguageOption[] = [
   },
   {
     code: 'hi',
-    nativeName: 'हिंदी',
+    nativeName: 'हिन्दी',
     englishName: 'HINDI',
     bgGradient: 'from-[#6366F1] to-[#3B82F6]',
     shadowColor: 'rgba(59, 130, 246, 0.35)',

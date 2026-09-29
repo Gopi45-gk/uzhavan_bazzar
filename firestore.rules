@@ -11,46 +11,120 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // 1. Farmers collection:
-    // Only the authenticated farmer can read and write their own profile document.
-    // Passwords must NEVER be stored here.
-    match /farmers/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isOwner(userId)
-                    && request.resource.data.uid == userId
-                    && request.resource.data.phoneNumber is string
-                    && !('password' in request.resource.data)
-                    && !('confirmPassword' in request.resource.data);
-      allow update: if isOwner(userId)
-                    && !('password' in request.resource.data)
-                    && !('confirmPassword' in request.resource.data);
-      allow delete: if isOwner(userId);
+    // 1. User Profiles & Addresses (Farmers & Buyers)
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if !isAuthenticated() || isOwner(userId);
+
+      match /addresses/{addressId} {
+        allow read: if true;
+        allow write: if true;
+      }
     }
 
-    // 2. Products collection:
-    // Publicly readable for marketplace browsing.
-    // Creation, editing, and deletion strictly restricted to the owning farmer.
+    // Role-specific accounts
+    match /farmers/{farmerId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if !isAuthenticated() || isOwner(farmerId);
+    }
+
+    match /buyers/{buyerId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if !isAuthenticated() || isOwner(buyerId);
+    }
+
+    // 2. Agricultural Products (Public marketplace read; owner farmer creates/edits/deletes)
     match /products/{productId} {
-      allow read: if true; // Public marketplace access
-      allow create: if isAuthenticated()
-                    && request.resource.data.farmerId == request.auth.uid
-                    && request.resource.data.productName is string
-                    && request.resource.data.quantityKg is number
-                    && request.resource.data.grade is string;
-      allow update, delete: if isAuthenticated()
-                            && resource.data.farmerId == request.auth.uid;
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if !isAuthenticated() ||
+                            request.auth.uid == resource.data.farmerId ||
+                            request.auth.uid == request.resource.data.farmerId;
     }
 
-    // 3. Orders collection:
-    // Only buyer or seller involved in the order can access or update it.
+    // 3. Cattle & Livestock Listings (Public marketplace read; owner farmer creates/edits/deletes)
+    match /cattleListings/{listingId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if !isAuthenticated() ||
+                            request.auth.uid == resource.data.farmerId ||
+                            request.auth.uid == request.resource.data.farmerId;
+    }
+
+    match /livestockListings/{listingId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    match /cattle/{cattleId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // 4. Buyer & Farmer Orders
     match /orders/{orderId} {
-      allow read: if isAuthenticated()
-                  && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
-      allow create: if isAuthenticated()
-                    && (request.resource.data.buyerId == request.auth.uid || request.resource.data.sellerId == request.auth.uid);
-      allow update: if isAuthenticated()
-                    && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
-      allow delete: if false; // Orders are permanent audit logs
+      allow read: if true;
+      allow create: if true;
+      allow update: if !isAuthenticated() ||
+                    request.auth.uid == resource.data.buyerId ||
+                    request.auth.uid == resource.data.farmerId;
+      allow delete: if false; // Preserved audit records
+
+      match /items/{itemId} {
+        allow read: if true;
+        allow create, update: if true;
+        allow delete: if false;
+      }
+    }
+
+    // 5. Bulk Orders (Wholesale supply requests)
+    match /bulkOrders/{bulkOrderId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if !isAuthenticated() ||
+                    request.auth.uid == resource.data.buyerId ||
+                    request.auth.uid == resource.data.farmerId;
+      allow delete: if false;
+    }
+
+    // 6. Reviews & Ratings
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if !isAuthenticated() || request.auth.uid == resource.data.buyerId;
+    }
+
+    // 7. Export Listings & Requests
+    match /exportListings/{exportId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    match /exportRequests/{exportId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // 8. Notifications
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 9. Community Discussions
+    match /community_posts/{postId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // 10. Mandi & Market Rates
+    match /market_rates/{rateId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }

@@ -81,7 +81,7 @@ export const RoleScreen: React.FC<RoleScreenProps> = ({ onSelectRole, onBack }) 
                   boxShadow: '0 8px 18px -3px rgba(34, 197, 94, 0.45)',
                 }}
               >
-                {t('farmerPortal', 'FARMER')}
+                {t('farmer')}
               </motion.button>
             </div>
           </motion.div>
@@ -128,7 +128,7 @@ export const RoleScreen: React.FC<RoleScreenProps> = ({ onSelectRole, onBack }) 
                   boxShadow: '0 8px 18px -3px rgba(34, 197, 94, 0.45)',
                 }}
               >
-                {t('buyerPortal', 'BUYER')}
+                {t('buyer')}
               </motion.button>
             </div>
           </motion.div>

@@ -83,7 +83,7 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
               </p>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Grade {product.grade}
+                  {t('grade', 'Grade')} {product.grade}
                 </span>
                 <span className="text-xs text-neutral-600 font-bold">
                   {quantity} kg × ₹{product.rate}
@@ -169,7 +169,7 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-bold text-neutral-500">FREE</span>
+              <span className="text-xs font-bold text-neutral-500">{t('free', 'FREE')}</span>
             </div>
           </div>
 
@@ -181,7 +181,7 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
               className="mt-4 pt-4 border-t border-neutral-100"
             >
               <span className="text-xs font-bold text-neutral-500 block mb-2">
-                Assigned Logistics Partner:
+                {t('assignedLogisticsPartner', 'Assigned Logistics Partner')}:
               </span>
               <div className="flex items-center gap-3 bg-neutral-50 p-3 rounded-xl border border-neutral-200/80">
                 <img
@@ -200,7 +200,7 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
                 </div>
                 <div className="flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-100/60 px-2.5 py-1 rounded-lg">
                   <Phone className="w-3.5 h-3.5" />
-                  <span>Call</span>
+                  <span>{t('call', 'Call')}</span>
                 </div>
               </div>
             </motion.div>
@@ -244,7 +244,7 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
                 </div>
               </div>
               <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                Fast & Secure
+                {t('fastAndSecure', 'Fast & Secure')}
               </span>
             </div>
 
@@ -273,7 +273,7 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
                     <span className="font-bold text-sm text-neutral-900">
                       {t('cod', 'Cash on Delivery (COD)')}
                     </span>
-                    <p className="text-xs text-neutral-400">Pay when goods reach your doorstep</p>
+                    <p className="text-xs text-neutral-400">{t('codSubtitle', 'Pay when goods reach your doorstep')}</p>
                   </div>
                 </div>
               </div>
@@ -284,12 +284,12 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
         {/* Bill Breakdown */}
         <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-neutral-200/80 space-y-2 text-sm">
           <div className="flex justify-between text-neutral-600">
-            <span>Produce Subtotal</span>
+            <span>{t('produceSubtotal', 'Produce Subtotal')}</span>
             <span>₹{subtotal.toLocaleString()}</span>
           </div>
           <div className="flex justify-between text-neutral-600">
-            <span>Logistics Fee</span>
-            <span>{deliveryFee > 0 ? `₹${deliveryFee}` : 'FREE'}</span>
+            <span>{t('logisticsFee', 'Logistics Fee')}</span>
+            <span>{deliveryFee > 0 ? `₹${deliveryFee}` : t('free', 'FREE')}</span>
           </div>
           <div className="border-t border-neutral-100 pt-2 flex justify-between font-black text-neutral-900 text-base">
             <span>{t('totalPayable', 'Total Amount')}</span>
@@ -303,7 +303,7 @@ export const BuyerCheckout: React.FC<BuyerCheckoutProps> = ({
         <div className="max-w-xl mx-auto flex items-center justify-between gap-4">
           <div>
             <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider block">
-              Grand Total
+              {t('grandTotal', 'Grand Total')}
             </span>
             <span className="text-2xl font-black text-neutral-900">
               ₹{grandTotal.toLocaleString()}

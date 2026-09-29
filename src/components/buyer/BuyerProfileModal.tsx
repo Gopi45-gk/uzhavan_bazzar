@@ -49,7 +49,7 @@ export const BuyerProfileModal: React.FC<BuyerProfileModalProps> = ({
           </div>
           <h3 className="text-xl font-black text-neutral-900 mt-3">{fullName}</h3>
           <span className="inline-block px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 mt-1">
-            🛒 Verified Produce Buyer
+            🛒 {t('verifiedBuyer', 'Verified Produce Buyer')}
           </span>
         </div>
 
@@ -92,7 +92,7 @@ export const BuyerProfileModal: React.FC<BuyerProfileModalProps> = ({
             className="w-full py-2.5 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span>{t('logout', 'Sign Out')}</span>
           </button>
         </div>
       </motion.div>

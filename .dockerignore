@@ -1,0 +1,26 @@
+.git
+.gitignore
+node_modules
+ml_env
+.next
+*.zip
+*.pdf
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.vscode
+.idea
+*.log
+browser
+scratch
+cmd.md
+"Premium Skin Analysis App.zip"
+Uzhavan_AI.pdf
+uzhavan-bazzar
+dataset/
+Unified_Dataset/
+ml/data/detection/
+ml/data/quality/
+ml/reports/

@@ -60,13 +60,43 @@ const pageVariants = {
 };
 
 export default function App() {
-  const { language, setLanguage, isLanguageSelected } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('splash');
   const [direction, setDirection] = useState<number>(1);
   const [imageError, setImageError] = useState(false);
   const [splashKey, setSplashKey] = useState(0);
 
   const logoUrl = ASSET_IMAGES.logo;
+
+  // Smart screen continuation after splash
+  const handleSplashContinue = () => {
+    try {
+      const session = authService.getCurrentSession();
+      if (session) {
+        if (session.role === 'buyer') {
+          navigateTo('buyer-dashboard', 1);
+          return;
+        } else if (session.role === 'farmer') {
+          navigateTo('farmer-dashboard', 1);
+          return;
+        }
+      }
+    } catch {}
+
+    const savedScreen = localStorage.getItem('uzhavan_last_screen') as ScreenType | null;
+    if (savedScreen && savedScreen !== 'splash' && savedScreen in SCREEN_ORDER) {
+      navigateTo(savedScreen, 1);
+      return;
+    }
+
+    const hasChosenLang = localStorage.getItem('uzhavan_selected_language') || localStorage.getItem('selectedLanguage');
+    if (hasChosenLang) {
+      navigateTo('role', 1);
+      return;
+    }
+
+    navigateTo('language', 1);
+  };
 
   // Unified page navigation handler that calculates animation direction
   const navigateTo = (nextScreen: ScreenType, explicitDir?: number) => {
@@ -75,30 +105,22 @@ export default function App() {
     const computedDir = explicitDir !== undefined ? explicitDir : (nextIdx >= currentIdx ? 1 : -1);
     setDirection(computedDir);
     setCurrentScreen(nextScreen);
+    if (nextScreen !== 'splash') {
+      try {
+        localStorage.setItem('uzhavan_last_screen', nextScreen);
+      } catch {}
+    }
   };
 
-  // Automatically transition from splash after 2.4 seconds
-  // If language was already selected previously, proceed to role/login directly
+  // Automatically transition from splash after 2.6 seconds
   useEffect(() => {
     if (currentScreen === 'splash') {
       const timer = setTimeout(() => {
-        if (isLanguageSelected) {
-          navigateTo('role', 1);
-        } else {
-          navigateTo('language', 1);
-        }
-      }, 2400);
+        handleSplashContinue();
+      }, 2600);
       return () => clearTimeout(timer);
     }
-  }, [currentScreen, splashKey, isLanguageSelected]);
-
-  const handleSplashContinue = () => {
-    if (isLanguageSelected) {
-      navigateTo('role', 1);
-    } else {
-      navigateTo('language', 1);
-    }
-  };
+  }, [currentScreen, splashKey]);
 
   const handleLanguageSelect = (lang: LanguageCode) => {
     setLanguage(lang);
@@ -202,7 +224,7 @@ export default function App() {
                   }}
                   className="px-6 py-2.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs sm:text-sm flex items-center gap-2 hover:bg-emerald-100 transition-colors shadow-xs cursor-pointer"
                 >
-                  <span>Continue</span>
+                  <span>{t('continueToLanguage', 'Continue')}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </motion.div>
@@ -293,14 +315,19 @@ export default function App() {
               className="w-full h-full"
             >
               <FarmerDashboard
-                onBackToLogin={() => navigateTo('farmer-login', -1)}
+                onBackToLogin={() => {
+                  try {
+                    localStorage.removeItem('uzhavan_last_screen');
+                  } catch {}
+                  navigateTo('farmer-login', -1);
+                }}
                 onSwitchToBuyer={() => navigateTo('buyer-dashboard', 1)}
                 onSwitchLanguage={() => navigateTo('language', -1)}
               />
             </motion.div>
           )}
 
-          {/* SCREEN 6: Buyer Dashboard (from referenced GitHub repo) */}
+          {/* SCREEN 6: Buyer Dashboard & Marketplace (Section 21 & 24) */}
           {currentScreen === 'buyer-dashboard' && (
             <motion.div
               key="buyer-dashboard-screen"
@@ -309,10 +336,15 @@ export default function App() {
               initial="enter"
               animate="center"
               exit="exit"
-              className="w-full h-full overflow-y-auto"
+              className="w-full h-full"
             >
               <BuyerDashboard
-                onBackToRole={() => navigateTo('role', -1)}
+                onBackToRole={() => {
+                  try {
+                    localStorage.removeItem('uzhavan_last_screen');
+                  } catch {}
+                  navigateTo('role', -1);
+                }}
                 onSwitchToFarmer={() => navigateTo('farmer-dashboard', 1)}
               />
             </motion.div>

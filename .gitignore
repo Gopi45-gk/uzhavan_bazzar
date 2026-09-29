@@ -51,3 +51,10 @@ ml/data/quality/test/
 Thumbs.db
 .vscode/
 .idea/
+
+# Scratch & binary attachments
+*.zip
+*.pdf
+notes
+cmd.md
+uzhavan-bazzar/

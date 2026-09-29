@@ -67,20 +67,20 @@ export const BuyerPaymentPartnersScreen: React.FC<PaymentPartnerScreenProps> = (
         {/* Payable Header Card */}
         <div className="bg-gradient-to-br from-emerald-800 to-emerald-950 text-white p-6 rounded-3xl shadow-lg text-center space-y-1">
           <span className="text-xs uppercase tracking-widest text-emerald-300 font-bold">
-            Total Payable to Farmer
+            {t('totalPayableToFarmer', 'Total Payable to Farmer')}
           </span>
           <div className="text-3xl sm:text-4xl font-black tracking-tight">
             ₹{totalAmount.toLocaleString()}.00
           </div>
           <div className="flex items-center justify-center gap-1 text-xs text-emerald-200/90 pt-2 font-medium">
             <ShieldCheck className="w-4 h-4 text-emerald-300" />
-            <span>100% Encrypted UPI Direct Settlement</span>
+            <span>{t('fastAndSecure', '100% Encrypted UPI Direct Settlement')}</span>
           </div>
         </div>
 
         <div className="pt-2">
           <span className="text-xs font-bold text-neutral-400 uppercase tracking-wider block mb-3">
-            Select Your Preferred UPI Gateway
+            {t('choosePaymentMethod', 'Select Your Preferred UPI Gateway')}
           </span>
 
           <div className="space-y-3">
@@ -181,7 +181,7 @@ export const BuyerSimulatedPaymentScreen: React.FC<SimulatedPaymentScreenProps> 
             onClick={onCancel}
             className="text-xs font-bold text-neutral-400 hover:text-neutral-700 uppercase cursor-pointer"
           >
-            Cancel
+            {t('cancel', 'Cancel')}
           </button>
         ) : (
           <div />
@@ -323,7 +323,7 @@ export const BuyerSimulatedPaymentScreen: React.FC<SimulatedPaymentScreenProps> 
                 onClick={onPaymentSuccess}
                 className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm tracking-wide shadow-md transition cursor-pointer"
               >
-                Track Live Delivery Map →
+                {t('trackLiveMap', 'Track Live Delivery Map')} →
               </button>
             </motion.div>
           </div>
