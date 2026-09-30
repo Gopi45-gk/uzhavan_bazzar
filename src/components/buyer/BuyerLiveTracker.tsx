@@ -85,14 +85,16 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
     // Add Zoom Control at bottom-right
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // CartoDB Voyager / OpenStreetMap clean tile layer
+    // OpenStreetMap clean tile layer (100% free, no API key required)
     const tileUrl =
       mapStyle === 'satellite'
         ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
     const baseTiles = L.tileLayer(tileUrl, {
       maxZoom: 19,
+      subdomains: ['a', 'b', 'c'],
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
 
     // Custom Farm Icon
@@ -185,7 +187,13 @@ export const BuyerLiveTracker: React.FC<BuyerLiveTrackerProps> = ({
     const bounds = L.latLngBounds([farmCoords, buyerHubCoords]);
     map.fitBounds(bounds, { padding: [60, 60] });
 
+    // Trigger map invalidation to ensure clean tile render after modal/screen animation
+    const resizeTimer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
     return () => {
+      clearTimeout(resizeTimer);
       map.remove();
       mapInstanceRef.current = null;
     };
