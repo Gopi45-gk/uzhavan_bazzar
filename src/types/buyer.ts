@@ -49,6 +49,11 @@ export interface UserOrder {
   productId?: string;
   orderStatus?: string;
   statusKey: 'ongoing' | 'delivered' | 'cancelled' | string;
+  deliveryMethod?: string;
+  deliveryDistanceKm?: number;
+  deliveryStatus?: string;
+  deliveryCharge?: number;
+  transportOption?: string;
 }
 
 export interface TransactionBreakdown {

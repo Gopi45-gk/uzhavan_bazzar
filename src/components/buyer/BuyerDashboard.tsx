@@ -32,7 +32,7 @@ import {
   BUYER_DRIVER_DATA,
 } from '../../constants/buyerMockData';
 import { BuyerProductDetail } from './BuyerProductDetail';
-import { BuyerCheckout } from './BuyerCheckout';
+import { BuyerCheckout, CheckoutOrderDetails } from './BuyerCheckout';
 import { BuyerPaymentPartnersScreen, BuyerSimulatedPaymentScreen } from './BuyerPaymentScreens';
 import { BuyerLiveTracker } from './BuyerLiveTracker';
 import { BuyerProfileModal } from './BuyerProfileModal';
@@ -81,6 +81,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   const [paymentPartner, setPaymentPartner] = useState<'GPay' | 'PhonePe' | 'Paytm'>('GPay');
   const [orders, setOrders] = useState<UserOrder[]>([]);
   const [bulkOrders, setBulkOrders] = useState<BulkOrder[]>([]);
+  const [checkoutDetails, setCheckoutDetails] = useState<CheckoutOrderDetails | null>(null);
 
   // Search & Filter state (Requirement 8)
   const [searchTerm, setSearchTerm] = useState('');
@@ -190,6 +191,11 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         farmerName: o.farmerName,
         productId: o.productId,
         orderStatus: o.orderStatus,
+        deliveryMethod: o.deliveryMethod || 'FARMER_DIRECT',
+        deliveryDistanceKm: o.deliveryDistanceKm,
+        deliveryStatus: o.deliveryStatus || 'Pending',
+        deliveryCharge: o.deliveryCharge,
+        transportOption: o.transportOption,
         statusKey:
           o.orderStatus === 'delivered'
             ? 'delivered'
@@ -258,21 +264,25 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     setView('checkout');
   };
 
-  // Handle online payment selection
-  const handleProceedToPayment = () => {
+
+  // Handle checkout proceed to payment
+  const handleProceedToPayment = (details: CheckoutOrderDetails) => {
+    setCheckoutDetails(details);
     setView('paymentPartners');
   };
 
-  // Handle cash on delivery confirm -> Save to Firebase Firestore (Section 12 & 14)
-  const handleConfirmCod = async () => {
+  // Handle cash on delivery confirm -> Save to Firebase Firestore (Section 4, 12, 14)
+  const handleConfirmCod = async (details: CheckoutOrderDetails) => {
+    setCheckoutDetails(details);
     if (selectedProduct) {
       const currentSession = authService.getCurrentSession();
       const buyerUid = currentSession?.uid || 'buyer-demo';
       const buyerName = currentSession?.name || buyerData?.fullName || 'Verified Buyer';
       const buyerMobile = currentSession?.phoneNumber || buyerData?.mobile || '+91 98765 43210';
-      const buyerAddress = currentSession?.location || buyerData?.location || 'Coimbatore, Tamil Nadu';
+      const buyerAddress = details.deliveryAddress || currentSession?.location || buyerData?.location || 'Coimbatore, Tamil Nadu';
       const subtotalAmt = selectedProduct.rate * orderQuantity;
-      const totalAmt = subtotalAmt + 120;
+      const deliveryCharge = details.deliveryCharge;
+      const totalAmt = details.totalAmount;
 
       try {
         await orderService.createOrder(
@@ -287,14 +297,21 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             quantity: orderQuantity,
             unit: selectedProduct.unit || 'kg',
             pricePerUnit: selectedProduct.rate,
+            unitPrice: selectedProduct.rate,
             subtotal: subtotalAmt,
-            deliveryCharge: 120,
+            deliveryCharge: deliveryCharge,
             totalAmount: totalAmt,
+            totalPrice: totalAmt,
             deliveryAddress: buyerAddress,
+            farmerLocation: details.farmerLocation,
+            buyerLocation: details.buyerLocation,
+            deliveryDistanceKm: details.deliveryDistanceKm,
+            deliveryMethod: details.deliveryMethod,
+            deliveryStatus: 'Pending',
             paymentMethod: 'Cash on Delivery (COD)',
             paymentStatus: 'pending',
             orderStatus: 'placed',
-            transportOption: 'Farmer Direct Delivery',
+            transportOption: details.transportOption,
           },
           [
             {
@@ -321,16 +338,17 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     setView('simulatedPayment');
   };
 
-  // Handle payment success -> Save to Firebase Firestore (Section 12 & 14)
+  // Handle payment success -> Save to Firebase Firestore (Section 4, 12, 14)
   const handlePaymentSuccess = async () => {
     if (selectedProduct) {
       const currentSession = authService.getCurrentSession();
       const buyerUid = currentSession?.uid || 'buyer-demo';
       const buyerName = currentSession?.name || buyerData?.fullName || 'Verified Buyer';
       const buyerMobile = currentSession?.phoneNumber || buyerData?.mobile || '+91 98765 43210';
-      const buyerAddress = currentSession?.location || buyerData?.location || 'Coimbatore, Tamil Nadu';
+      const buyerAddress = checkoutDetails?.deliveryAddress || currentSession?.location || buyerData?.location || 'Coimbatore, Tamil Nadu';
       const subtotalAmt = selectedProduct.rate * orderQuantity;
-      const totalAmt = subtotalAmt + 120;
+      const deliveryCharge = checkoutDetails?.deliveryCharge ?? 120;
+      const totalAmt = checkoutDetails?.totalAmount ?? (subtotalAmt + deliveryCharge);
 
       try {
         await orderService.createOrder(
@@ -345,14 +363,21 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             quantity: orderQuantity,
             unit: selectedProduct.unit || 'kg',
             pricePerUnit: selectedProduct.rate,
+            unitPrice: selectedProduct.rate,
             subtotal: subtotalAmt,
-            deliveryCharge: 120,
+            deliveryCharge: deliveryCharge,
             totalAmount: totalAmt,
+            totalPrice: totalAmt,
             deliveryAddress: buyerAddress,
+            farmerLocation: checkoutDetails?.farmerLocation,
+            buyerLocation: checkoutDetails?.buyerLocation,
+            deliveryDistanceKm: checkoutDetails?.deliveryDistanceKm,
+            deliveryMethod: checkoutDetails?.deliveryMethod || 'FARMER_DIRECT',
+            deliveryStatus: 'Pending',
             paymentMethod: `UPI (${paymentPartner})`,
             paymentStatus: 'completed',
             orderStatus: 'confirmed',
-            transportOption: 'Farmer Direct Delivery',
+            transportOption: checkoutDetails?.transportOption || 'Farmer Direct Delivery',
           },
           [
             {
@@ -446,7 +471,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   if (view === 'paymentPartners' && selectedProduct) {
     return (
       <BuyerPaymentPartnersScreen
-        totalAmount={selectedProduct.rate * orderQuantity + 120}
+        totalAmount={checkoutDetails?.totalAmount ?? (selectedProduct.rate * orderQuantity + 120)}
         onBack={() => setView('checkout')}
         onSelectPartner={handleSelectPartner}
       />
@@ -458,7 +483,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
       <BuyerSimulatedPaymentScreen
         product={selectedProduct}
         quantity={orderQuantity}
-        totalAmount={selectedProduct.rate * orderQuantity + 120}
+        totalAmount={checkoutDetails?.totalAmount ?? (selectedProduct.rate * orderQuantity + 120)}
         partner={paymentPartner}
         onPaymentSuccess={handlePaymentSuccess}
         onCancel={() => setView('paymentPartners')}
@@ -793,13 +818,29 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                             {order.productName || 'Fresh Organic Tomatoes'}
                           </span>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                            {t('statusInTransit', 'On the Way')}
+                            {order.deliveryStatus || t('statusInTransit', 'On the Way')}
                           </span>
                         </div>
                         <p className="text-xs text-neutral-400 mt-0.5">
                           Order ID: <span className="font-mono font-bold">{order.id}</span> • Placed on{' '}
                           {order.date}
                         </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            order.deliveryMethod === 'INDIA_POST'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-neutral-100 text-neutral-700'
+                          }`}>
+                            {order.deliveryMethod === 'INDIA_POST'
+                              ? `🇮🇳 ${t('indiaPostDelivery', 'India Post Delivery')}`
+                              : (order.transportOption || t('deliveredByFarmer', 'Farmer Direct'))}
+                          </span>
+                          {order.deliveryDistanceKm != null && (
+                            <span className="text-[10px] text-neutral-500 font-bold">
+                              {order.deliveryDistanceKm} KM
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -862,6 +903,11 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                       <p className="text-xs text-neutral-400 mt-0.5">
                         {order.id} • {order.date}
                       </p>
+                      {order.deliveryMethod === 'INDIA_POST' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mt-1">
+                          🇮🇳 India Post • {order.deliveryDistanceKm ? `${order.deliveryDistanceKm} KM` : ''} ({order.deliveryStatus || 'Delivered'})
+                        </span>
+                      )}
                     </div>
 
                     <div className="text-right flex items-center gap-2.5">

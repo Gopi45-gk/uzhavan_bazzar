@@ -36,7 +36,7 @@ export interface OrderItemLine {
 }
 
 export interface OrderDocument {
-  // Required fields from Section 12
+  // Required fields from Section 12 & Delivery Rules
   orderId: string;
   buyerId: string;
   buyerName: string;
@@ -48,12 +48,22 @@ export interface OrderDocument {
   quantity: number;
   unit: string;
   pricePerUnit: number;
+  unitPrice?: number;
   subtotal: number;
   deliveryCharge: number;
   totalAmount: number;
+  totalPrice?: number;
   deliveryAddress: string;
   deliveryLatitude?: number | string | null;
   deliveryLongitude?: number | string | null;
+
+  // Requirement 3 & 4: Geo-coordinates, distance, and delivery method
+  farmerLocation?: { latitude: number; longitude: number } | null;
+  buyerLocation?: { latitude: number; longitude: number } | null;
+  deliveryDistanceKm?: number;
+  deliveryMethod?: 'INDIA_POST' | 'FARMER_DIRECT' | 'SELF_PICKUP' | string;
+  deliveryStatus?: 'Pending' | 'Booked' | 'Dispatched' | 'In Transit' | 'Out for Delivery' | 'Delivered' | string;
+
   paymentMethod: string;
   paymentStatus: 'pending' | 'completed' | 'failed' | 'cod';
   orderStatus: OrderStatusType;
@@ -269,7 +279,7 @@ export const orderService = {
       const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
       const docRef = doc(colRef, orderId);
 
-      const payload = {
+      const payload: Record<string, any> = {
         orderId,
         id: orderId,
         buyerId: orderData.buyerId,
@@ -286,19 +296,29 @@ export const orderService = {
         qty: `${orderData.quantity} ${orderData.unit || 'kg'}`,
         unit: orderData.unit || 'kg',
         pricePerUnit: orderData.pricePerUnit,
+        unitPrice: orderData.unitPrice || orderData.pricePerUnit || 0,
         subtotal: orderData.subtotal,
         deliveryCharge: orderData.deliveryCharge || 0,
         totalAmount: orderData.totalAmount,
+        totalPrice: orderData.totalPrice || orderData.totalAmount || 0,
         total: `₹${orderData.totalAmount.toLocaleString()}`,
         deliveryAddress: orderData.deliveryAddress,
         location: orderData.deliveryAddress,
         deliveryLatitude: orderData.deliveryLatitude ?? null,
         deliveryLongitude: orderData.deliveryLongitude ?? null,
+
+        // Requirement 3 & 4: Geo-coordinates & Delivery fields
+        farmerLocation: orderData.farmerLocation ?? null,
+        buyerLocation: orderData.buyerLocation ?? null,
+        deliveryDistanceKm: Number(orderData.deliveryDistanceKm) || 0,
+        deliveryMethod: orderData.deliveryMethod || (orderData.transportOption === 'India Post Delivery' ? 'INDIA_POST' : 'FARMER_DIRECT'),
+        deliveryStatus: orderData.deliveryStatus || 'Pending',
+
         paymentMethod: orderData.paymentMethod || 'Online UPI',
         paymentStatus: orderData.paymentStatus || 'completed',
         orderStatus: (orderData.orderStatus || 'placed') as OrderStatusType,
         status: formatOrderStatus(orderData.orderStatus || 'placed'),
-        transportOption: orderData.transportOption || 'Farmer Direct Pickup',
+        transportOption: orderData.transportOption || 'Farmer Direct Delivery',
         driverId: orderData.driverId || '',
         time: 'Just now',
         createdAt: serverTimestamp(),
@@ -329,6 +349,25 @@ export const orderService = {
         });
       }
 
+      // Requirement 5 & 9: Create real-time notification for Farmer
+      if (orderData.farmerId) {
+        import('./notificationService').then(({ notificationService }) => {
+          notificationService.createNotification({
+            userId: orderData.farmerId!,
+            type: 'NEW_ORDER',
+            title: 'New Order Received',
+            message: `Your product ${orderData.productName || 'produce'} (${orderData.quantity || 1} ${orderData.unit || 'kg'}) has been ordered by ${orderData.buyerName || 'Buyer'}.`,
+            orderId,
+            productId: orderData.productId,
+            productName: orderData.productName,
+            quantity: orderData.quantity,
+            buyerName: orderData.buyerName,
+            targetScreen: 'orders',
+            isRead: false,
+          }).catch((err) => console.warn('Notification creation notice:', err));
+        });
+      }
+
       return orderId;
     } catch (err) {
       console.warn('Failed to save order to Firestore:', err);
@@ -337,7 +376,8 @@ export const orderService = {
   },
 
   /**
-   * Updates order status in Firestore orders/{orderId} (Section 13).
+   * Updates order status in Firestore orders/{orderId} (Section 11 & 13).
+   * Automatically updates deliveryStatus and notifies buyer and farmer.
    */
   async updateOrderStatus(
     orderId: string,
@@ -346,13 +386,59 @@ export const orderService = {
     try {
       const docRef = doc(db, 'orders', orderId);
       const statusLabel = formatOrderStatus(orderStatus);
-      await updateDoc(docRef, {
+
+      // Map order status to delivery status
+      let newDeliveryStatus: string | undefined;
+      if (orderStatus === 'shipped') newDeliveryStatus = 'In Transit';
+      else if (orderStatus === 'out_for_delivery') newDeliveryStatus = 'Out for Delivery';
+      else if (orderStatus === 'delivered') newDeliveryStatus = 'Delivered';
+      else if (orderStatus === 'confirmed') newDeliveryStatus = 'Booked';
+
+      const updatePayload: Record<string, any> = {
         orderStatus,
         status: statusLabel,
         updatedAt: serverTimestamp(),
+      };
+
+      if (newDeliveryStatus) {
+        updatePayload.deliveryStatus = newDeliveryStatus;
+      }
+
+      await updateDoc(docRef, updatePayload);
+
+      // Trigger status change notification
+      import('./notificationService').then(async ({ notificationService }) => {
+        try {
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            notificationService.notifyOrderStatusChange(
+              { id: snap.id, ...snap.data() } as OrderDocument,
+              String(orderStatus)
+            ).catch(() => {});
+          }
+        } catch {}
       });
     } catch (err) {
       console.warn('Failed to update order status in Firestore:', err);
+    }
+  },
+
+  /**
+   * Updates specific delivery status for India Post / Logistics (Requirement 15).
+   * Status values: 'Pending' | 'Booked' | 'Dispatched' | 'In Transit' | 'Out for Delivery' | 'Delivered'
+   */
+  async updateDeliveryStatus(
+    orderId: string,
+    deliveryStatus: string
+  ): Promise<void> {
+    try {
+      const docRef = doc(db, 'orders', orderId);
+      await updateDoc(docRef, {
+        deliveryStatus,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.warn('Failed to update delivery status in Firestore:', err);
     }
   },
 

@@ -25,6 +25,7 @@ import {
   ThumbsUp,
   Send,
   MessageSquare,
+  Bell,
 } from 'lucide-react';
 import { ASSET_IMAGES } from '../constants/assets';
 import { CattleModal } from './CattleModal';
@@ -39,6 +40,7 @@ import { marketInsightService, MarketRate } from '../services/marketInsightServi
 import { farmerService, FarmerProfile, DEFAULT_FARMER } from '../services/farmerService';
 import { authService } from '../services/authService';
 import { bulkOrderService, BulkOrder } from '../services/exportService';
+import { notificationService, NotificationDocument } from '../services/notificationService';
 import { useLanguage } from '../context/LanguageContext';
 import { LanguageCode } from '../types';
 
@@ -111,6 +113,9 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
   const [marketRates, setMarketRates] = useState<MarketRate[]>([]);
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
   const [bulkRequests, setBulkRequests] = useState<BulkOrder[]>([]);
+  const [notifications, setNotifications] = useState<NotificationDocument[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   // Produce Edit state (Requirement 11: Edit, Update quantity, Update price, Change availability)
   const [editingProduce, setEditingProduce] = useState<ProductListing | null>(null);
@@ -137,9 +142,13 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
       setCattleListings(items);
     });
 
+    const farmerUid = activeUid || 'farmer-default-murugan';
+
     // 3. Realtime Orders from Firestore /orders (Section 23: Farmer Orders)
     const unsubOrders = orderService.subscribeOrders((items) => {
       setOrders(items);
+      // Requirement 6 & 12: Check upcoming orders and delivery today from actual Firestore dates
+      notificationService.checkUpcomingOrders(farmerUid, items, language === 'ta').catch(() => {});
     });
 
     // 4. Realtime Market Mandi Rates from Firestore /market_rates
@@ -154,9 +163,12 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
 
     // 6. Realtime Bulk Requests from Firestore /bulkOrders
     const unsubBulk = bulkOrderService.subscribeAllBulkOrders((items) => {
-      // Filter to only show requests for this farmer's products
-      const farmerProducts = new Set<string>();
       setBulkRequests(items);
+    });
+
+    // 7. Realtime Farmer Notifications from Firestore /notifications (Section 5, 8, 9)
+    const unsubNotifs = notificationService.subscribeNotifications(farmerUid, (items) => {
+      setNotifications(items);
     });
 
     return () => {
@@ -166,8 +178,9 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
       unsubRates();
       unsubCommunity();
       unsubBulk();
+      unsubNotifs();
     };
-  }, []);
+  }, [language]);
 
   const handleAcceptBulkRequest = async (orderId: string) => {
     try {
@@ -384,15 +397,34 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
           </div>
         </div>
 
-        {/* Right: Circular Profile Icon matching screenshot (2px green border, green user) */}
-        <button
-          id="dashboard-profile-btn"
-          onClick={() => setProfileOpen(true)}
-          className="w-10 h-10 rounded-full border-2 border-[#15803D] bg-transparent flex items-center justify-center text-[#15803D] hover:scale-105 active:scale-95 transition-transform"
-          aria-label="Open Farmer Profile"
-        >
-          <User className="w-6 h-6 text-[#15803D] stroke-[2.2]" />
-        </button>
+        {/* Right Actions: Notification Bell + Profile Button (Section 5, 9, 10) */}
+        <div className="flex items-center gap-2">
+          {/* Notification Bell Icon with real-time Firebase badge */}
+          <button
+            id="dashboard-notification-btn"
+            onClick={() => setShowNotifications(true)}
+            className="relative w-10 h-10 rounded-full border-2 border-[#15803D] bg-white flex items-center justify-center text-[#15803D] hover:scale-105 active:scale-95 transition-transform shadow-xs cursor-pointer"
+            aria-label="Farmer Notifications"
+            title={t('notifications', 'Notifications')}
+          >
+            <Bell className="w-5 h-5 text-[#15803D] stroke-[2.2]" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-xs">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Right: Circular Profile Icon matching screenshot (2px green border, green user) */}
+          <button
+            id="dashboard-profile-btn"
+            onClick={() => setProfileOpen(true)}
+            className="w-10 h-10 rounded-full border-2 border-[#15803D] bg-transparent flex items-center justify-center text-[#15803D] hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+            aria-label="Open Farmer Profile"
+          >
+            <User className="w-6 h-6 text-[#15803D] stroke-[2.2]" />
+          </button>
+        </div>
       </header>
 
       {/* Main Feature Badges Layout matching exact reference image */}
@@ -688,6 +720,27 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                       <span>{t('myListings', 'My Listings')}</span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-neutral-400" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setDrawerOpen(false);
+                      setShowNotifications(true);
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-neutral-50 text-neutral-800 font-medium text-sm transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bell className="w-5 h-5 text-amber-600" />
+                      <span>{t('notifications', 'Notifications')}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {unreadCount > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                          {unreadCount}
+                        </span>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-neutral-400" />
+                    </div>
                   </button>
 
                   <button
@@ -1224,6 +1277,24 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                       )}
                     </div>
 
+                    {/* Delivery Method Badge & Distance (Section 14 & 15) */}
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                        order.deliveryMethod === 'INDIA_POST'
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                          : 'bg-neutral-100 text-neutral-700'
+                      }`}>
+                        {order.deliveryMethod === 'INDIA_POST'
+                          ? `🇮🇳 ${t('indiaPostDelivery', 'India Post Delivery')}`
+                          : (order.transportOption || 'Farmer Direct')}
+                      </span>
+                      {order.deliveryDistanceKm != null && (
+                        <span className="text-[11px] text-neutral-500 font-bold">
+                          {order.deliveryDistanceKm} KM
+                        </span>
+                      )}
+                    </div>
+
                     {/* Order Status Controller (Section 13) */}
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-[11px] font-semibold text-neutral-500">{t('orderStatus', 'Order Status:')}</span>
@@ -1241,6 +1312,27 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                         <option value="cancelled">{t('statusCancelled', 'Cancelled')}</option>
                       </select>
                     </div>
+
+                    {/* India Post Delivery Status Controller (Section 15) */}
+                    {order.deliveryMethod === 'INDIA_POST' && (
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] font-semibold text-neutral-500">
+                          {t('deliveryStatusLabel', 'India Post Status:')}
+                        </span>
+                        <select
+                          value={order.deliveryStatus || 'Pending'}
+                          onChange={(e) => orderService.updateDeliveryStatus(order.id, e.target.value)}
+                          className="text-xs font-bold py-1 px-2.5 rounded-lg bg-amber-50 text-amber-900 border border-amber-300 focus:outline-none cursor-pointer"
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="Booked">Booked</option>
+                          <option value="Dispatched">Dispatched</option>
+                          <option value="In Transit">In Transit</option>
+                          <option value="Out for Delivery">Out for Delivery</option>
+                          <option value="Delivered">Delivered</option>
+                        </select>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pt-2 border-t border-neutral-200/60 text-xs text-neutral-500">
                       <span className="flex items-center gap-1">
@@ -1575,6 +1667,180 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                       )}
                     </div>
                   ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* --- REAL-TIME NOTIFICATIONS SHEET (Section 5, 8, 9, 10, 13) --- */}
+      <AnimatePresence>
+        {showNotifications && (
+          <div
+            id="sheet-notifications-overlay"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4"
+            onClick={() => setShowNotifications(false)}
+          >
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold">
+                    <Bell className="w-5 h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-neutral-900 leading-tight">
+                      {t('notifications', 'Notifications')}
+                    </h3>
+                    <p className="text-xs text-neutral-500">
+                      {unreadCount > 0
+                        ? `${unreadCount} ${t('unreadNotifications', 'unread')}`
+                        : t('noNotifications', 'All caught up')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={async () => {
+                        const farmerUid = profileData.uid || 'farmer-default-murugan';
+                        await notificationService.markAllAsRead(farmerUid);
+                      }}
+                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 cursor-pointer transition-colors"
+                    >
+                      {t('markAllAsRead', 'Mark all read')}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowNotifications(false)}
+                    className="p-1 rounded-full text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Notification Items List */}
+              <div className="mt-4 space-y-3">
+                {notifications.map((notif) => {
+                  return (
+                    <div
+                      key={notif.id}
+                      onClick={async () => {
+                        if (!notif.isRead) {
+                          await notificationService.markAsRead(notif.id);
+                        }
+                        setShowNotifications(false);
+                        // Navigate to relevant screen (Requirement 13)
+                        if (notif.targetScreen) {
+                          setActiveSheet(notif.targetScreen);
+                        } else if (notif.type === 'BULK_ORDER') {
+                          setActiveSheet('bulk-requests');
+                        } else if (notif.type === 'PRODUCT_LOW_STOCK') {
+                          setActiveSheet('my-listings');
+                        } else {
+                          setActiveSheet('orders');
+                        }
+                      }}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer relative ${
+                        !notif.isRead
+                          ? 'bg-amber-50/60 border-amber-200 shadow-xs hover:border-amber-400'
+                          : 'bg-neutral-50 border-neutral-200/80 hover:border-neutral-300'
+                      }`}
+                    >
+                      {/* Unread indicator dot */}
+                      {!notif.isRead && (
+                        <span className="absolute top-4 right-4 w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-100" />
+                      )}
+
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base ${
+                            notif.type === 'NEW_ORDER'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : notif.type === 'UPCOMING_ORDER' || notif.type === 'DELIVERY_TODAY'
+                              ? 'bg-sky-100 text-sky-800'
+                              : notif.type === 'BULK_ORDER'
+                              ? 'bg-purple-100 text-purple-800'
+                              : notif.type === 'ORDER_DELIVERED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : notif.type === 'ORDER_CANCELLED'
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {notif.type === 'NEW_ORDER' && '🛒'}
+                          {notif.type === 'UPCOMING_ORDER' && '📅'}
+                          {notif.type === 'DELIVERY_TODAY' && '🚚'}
+                          {notif.type === 'BULK_ORDER' && '📦'}
+                          {notif.type === 'ORDER_CONFIRMED' && '✓'}
+                          {notif.type === 'ORDER_DISPATCHED' && '🚛'}
+                          {notif.type === 'ORDER_DELIVERED' && '🎉'}
+                          {notif.type === 'ORDER_CANCELLED' && '✕'}
+                          {notif.type === 'REVIEW_RECEIVED' && '⭐'}
+                          {notif.type === 'PRODUCT_LOW_STOCK' && '⚠️'}
+                        </div>
+
+                        <div className="flex-1 min-w-0 pr-4">
+                          <h4 className="font-extrabold text-neutral-900 text-sm leading-snug">
+                            {notif.title}
+                          </h4>
+                          <p className="text-xs text-neutral-600 mt-1 leading-relaxed">
+                            {notif.message}
+                          </p>
+
+                          {/* Metadata row */}
+                          <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-neutral-500">
+                            {notif.orderId && (
+                              <span className="font-mono font-bold bg-neutral-200/70 px-1.5 py-0.5 rounded text-neutral-700">
+                                {notif.orderId}
+                              </span>
+                            )}
+                            {notif.quantity && (
+                              <span className="font-semibold text-emerald-800 bg-emerald-100/70 px-1.5 py-0.5 rounded">
+                                {notif.quantity}
+                              </span>
+                            )}
+                            {notif.buyerName && (
+                              <span className="font-medium text-neutral-600">
+                                {notif.buyerName}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-neutral-400">
+                              {notif.createdAt?.seconds
+                                ? new Date(notif.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                : 'Just now'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {notifications.length === 0 && (
+                  <div className="text-center py-12 text-neutral-400">
+                    <Bell className="w-10 h-10 mx-auto mb-2 text-neutral-300 stroke-[1.5]" />
+                    <p className="font-bold text-sm text-neutral-600">
+                      {t('noNotifications', 'No notifications yet')}
+                    </p>
+                    <p className="text-xs text-neutral-400 mt-1">
+                      New orders, deliveries, and bulk supply requests will appear here in real time.
+                    </p>
+                  </div>
                 )}
               </div>
             </motion.div>

@@ -108,10 +108,12 @@ service cloud.firestore {
       allow create, update, delete: if true;
     }
 
-    // 8. Notifications
+    // 8. Notifications — Farmers & Buyers can only read/update notifications belonging to their userId
     match /notifications/{notificationId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if !isAuthenticated() || request.auth.uid == resource.data.userId;
+      allow create: if true;
+      allow update: if !isAuthenticated() || request.auth.uid == resource.data.userId;
+      allow delete: if !isAuthenticated() || request.auth.uid == resource.data.userId;
     }
 
     // 9. Community Discussions

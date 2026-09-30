@@ -423,10 +423,28 @@ export interface Translations {
   noBulkOrders: string;
   bulkOrderStatus: string;
 
-  // Category Filters
-  allCategories: string;
-  vegetables: string;
-  fruits: string;
-  grains: string;
-  livestock: string;
+  // Delivery & India Post
+  indiaPostDelivery: string;
+  indiaPostSubtitle: string;
+  deliveryDistance: string;
+  suitableAbove50km: string;
+  estimatedDeliveryTimeLabel: string;
+  deliveryMethodLabel: string;
+  deliveryStatusLabel: string;
+
+  // Real-time Notifications
+  notifications: string;
+  noNotifications: string;
+  markAllAsRead: string;
+  unreadNotifications: string;
+  newOrderReceived: string;
+  upcomingOrder: string;
+  deliveryToday: string;
+  orderConfirmedNotif: string;
+  orderDispatchedNotif: string;
+  orderDeliveredNotif: string;
+  orderCancelledNotif: string;
+  bulkOrderRequestNotif: string;
+  reviewReceivedNotif: string;
+  productLowStockNotif: string;
 }

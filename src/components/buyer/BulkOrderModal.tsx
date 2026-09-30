@@ -5,6 +5,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { bulkOrderService } from '../../services/exportService';
 import { productService, ProductListing } from '../../services/productService';
 import { authService } from '../../services/authService';
+import { notificationService } from '../../services/notificationService';
 
 interface BulkOrderModalProps {
   open: boolean;
@@ -12,7 +13,7 @@ interface BulkOrderModalProps {
 }
 
 export const BulkOrderModal: React.FC<BulkOrderModalProps> = ({ open, onClose }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const [products, setProducts] = useState<ProductListing[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -54,7 +55,7 @@ export const BulkOrderModal: React.FC<BulkOrderModalProps> = ({ open, onClose })
     setSubmitting(true);
     try {
       const session = authService.getCurrentSession();
-      await bulkOrderService.createBulkOrder({
+      const bulkOrderId = await bulkOrderService.createBulkOrder({
         buyerId: session?.uid || 'buyer-demo',
         buyerName: session?.name || 'Verified Buyer',
         farmerId: selectedProduct.farmerId || 'farmer-default',
@@ -67,6 +68,22 @@ export const BulkOrderModal: React.FC<BulkOrderModalProps> = ({ open, onClose })
         notes: notes.trim(),
         status: 'pending',
       });
+
+      // Requirement 16: Bulk Order Notification to Farmer
+      await notificationService.notifyBulkOrder(
+        {
+          farmerId: selectedProduct.farmerId || 'farmer-default',
+          buyerId: session?.uid || 'buyer-demo',
+          buyerName: session?.name || 'Verified Buyer',
+          productId: selectedProduct.productId || selectedProduct.id,
+          productName: selectedProduct.productName || selectedProduct.name,
+          bulkOrderId,
+          quantity: Number(quantity),
+          unit,
+        },
+        language === 'ta'
+      );
+
       setSubmitted(true);
       setTimeout(() => {
         setSubmitted(false);
