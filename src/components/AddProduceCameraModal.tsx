@@ -365,18 +365,26 @@ export const AddProduceCameraModal: React.FC<AddProduceCameraModalProps> = ({
       formData.append('district', defaultDistrict);
       formData.append('state', 'Tamil Nadu');
 
-      const API_ENDPOINT = 'http://localhost:8000/api/products/analyze';
       let response: Response;
       try {
-        response = await fetch(API_ENDPOINT, {
-          method: 'POST',
-          body: formData,
-        });
-      } catch {
         response = await fetch('/api/products/analyze', {
           method: 'POST',
           body: formData,
         });
+        if (!response.ok) throw new Error();
+      } catch {
+        try {
+          response = await fetch('http://localhost:8008/api/products/analyze', {
+            method: 'POST',
+            body: formData,
+          });
+          if (!response.ok) throw new Error();
+        } catch {
+          response = await fetch('http://localhost:8000/api/products/analyze', {
+            method: 'POST',
+            body: formData,
+          });
+        }
       }
 
       clearTimeout(pTimer2);
@@ -496,11 +504,25 @@ export const AddProduceCameraModal: React.FC<AddProduceCameraModalProps> = ({
       // 3. Send to backend server for validation & persistence
       let backendRecord = null;
       try {
-        const response = await fetch('http://localhost:8000/api/products', {
+        let response = await fetch('/api/products', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
+        if (!response.ok) {
+          response = await fetch('http://localhost:8008/api/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        }
+        if (!response.ok) {
+          response = await fetch('http://localhost:8000/api/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        }
         if (response.ok) {
           const resJson = await response.json();
           backendRecord = resJson.product;

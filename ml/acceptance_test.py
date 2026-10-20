@@ -204,8 +204,11 @@ def test_api_endpoints():
     print("TEST 6: ML REST API Endpoints & Server-Side Validation")
     print("=" * 60)
 
+    port = os.environ.get("PORT", "8008")
+    base_url = f"http://localhost:{port}"
+
     # Test /api/pricing-rules
-    r = requests.get("http://localhost:8000/api/pricing-rules")
+    r = requests.get(f"{base_url}/api/pricing-rules")
     assert r.status_code == 200
     data = r.json()
     assert "A" in data["grades"] and "B" in data["grades"] and "C" in data["grades"]
@@ -213,7 +216,7 @@ def test_api_endpoints():
     print("  ✓ /api/pricing-rules strictly returns A, B, C")
 
     # Test /api/mandi/price
-    r_mandi = requests.get("http://localhost:8000/api/mandi/price?commodity=tomato")
+    r_mandi = requests.get(f"{base_url}/api/mandi/price?commodity=tomato")
     assert r_mandi.status_code == 200
     mandi_json = r_mandi.json()
     assert mandi_json["data"]["mandi_price"] > 0
@@ -232,7 +235,7 @@ def test_api_endpoints():
         "farmer_id": "TEST-FARMER-1",
         "farmer_location": "Madurai Mandi Gate 2",
     }
-    r_post = requests.post("http://localhost:8000/api/products", json=listing_payload)
+    r_post = requests.post(f"{base_url}/api/products", json=listing_payload)
     assert r_post.status_code == 200
     saved = r_post.json()["product"]
     print("  Server recalculated values:")
@@ -247,7 +250,7 @@ def test_api_endpoints():
 
     # Test rejecting invalid grade
     invalid_payload = {**listing_payload, "grade": "D"}
-    r_inv = requests.post("http://localhost:8000/api/products", json=invalid_payload)
+    r_inv = requests.post(f"{base_url}/api/products", json=invalid_payload)
     assert r_inv.status_code == 400
     print("  ✓ PASS: Invalid grade 'D' correctly rejected by server!")
 

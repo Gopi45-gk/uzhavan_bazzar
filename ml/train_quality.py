@@ -117,15 +117,15 @@ def get_transforms(imgsz=224, is_train=True):
 def generate_quality_targets(labels, class_names):
     """
     Generate quality score targets from class labels.
-    fresh → high score (85-100), rotten → low score (0-25)
+    fresh -> 95.0 (calibrated for Grade A), rotten -> 15.0 (calibrated for Grade C)
     """
     scores = torch.zeros(len(labels), dtype=torch.float32)
     for i, label in enumerate(labels):
         cls_name = class_names[label].lower()
         if "fresh" in cls_name:
-            scores[i] = np.random.uniform(85, 100)
+            scores[i] = 95.0
         elif "rotten" in cls_name:
-            scores[i] = np.random.uniform(0, 25)
+            scores[i] = 15.0
         else:
             scores[i] = 50.0
     return scores
@@ -153,14 +153,21 @@ def train_quality():
         sys.exit(1)
     
     # Device
-    device = torch.device(hw_cfg["device"] if torch.cuda.is_available() else "cpu")
-    use_amp = hw_cfg["mixed_precision"] and torch.cuda.is_available()
+    device_str = hw_cfg.get("device", "cuda:0")
+    if torch.cuda.is_available() and "cuda" in device_str:
+        device = torch.device(device_str)
+        use_amp = hw_cfg.get("mixed_precision", True)
+        gpu_name = torch.cuda.get_device_name(device)
+    else:
+        device = torch.device("cpu")
+        use_amp = False
+        gpu_name = "CPU"
     
     print(f"\n{'='*60}")
-    print(f"QUALITY GRADING MODEL TRAINING")
+    print(f"QUALITY GRADING MODEL TRAINING ON GPU")
     print(f"{'='*60}")
     print(f"  Architecture: {q_cfg['architecture']}")
-    print(f"  Device: {device}")
+    print(f"  Device: {device} ({gpu_name})")
     print(f"  Mixed Precision: {use_amp}")
     print(f"  Image Size: {q_cfg['imgsz']}")
     print(f"  Batch Size: {q_cfg['batch_size']}")
@@ -201,12 +208,12 @@ def train_quality():
     train_loader = DataLoader(
         train_dataset, batch_size=q_cfg["batch_size"],
         shuffle=True, num_workers=hw_cfg["num_workers"],
-        pin_memory=True, drop_last=True
+        pin_memory=True if device.type == "cuda" else False, drop_last=True
     )
     val_loader = DataLoader(
         val_dataset, batch_size=q_cfg["batch_size"],
         shuffle=False, num_workers=hw_cfg["num_workers"],
-        pin_memory=True
+        pin_memory=True if device.type == "cuda" else False
     )
     
     # Model
@@ -221,16 +228,21 @@ def train_quality():
     print(f"\nTotal parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
     
-    # Loss functions
-    cls_criterion = nn.CrossEntropyLoss(weight=class_weights)
+    # Loss functions with label smoothing for higher generalization
+    cls_criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.05)
     reg_criterion = nn.SmoothL1Loss()
     
-    # Optimizer
-    optimizer = optim.AdamW(
-        model.parameters(),
-        lr=q_cfg["learning_rate"],
-        weight_decay=q_cfg["weight_decay"]
+    # Optimizer with differential learning rates: fine-tuning backbone gently
+    backbone_params = [p for p in model.backbone.parameters() if p.requires_grad]
+    head_params = (
+        list(model.shared_fc.parameters()) +
+        list(model.classifier.parameters()) +
+        list(model.quality_regressor.parameters())
     )
+    optimizer = optim.AdamW([
+        {'params': backbone_params, 'lr': q_cfg["learning_rate"] * 0.2},
+        {'params': head_params, 'lr': q_cfg["learning_rate"]},
+    ], weight_decay=q_cfg["weight_decay"])
     
     # Cosine annealing LR scheduler
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -240,7 +252,7 @@ def train_quality():
     )
     
     # Mixed precision scaler
-    scaler = GradScaler('cuda', enabled=use_amp)
+    scaler = GradScaler('cuda', enabled=use_amp) if device.type == 'cuda' else GradScaler('cpu', enabled=False)
     
     # Training loop
     best_val_acc = 0.0

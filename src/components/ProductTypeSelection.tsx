@@ -84,7 +84,7 @@ export const ProductTypeSelection: React.FC<ProductTypeSelectionProps> = ({
               >
                 <div className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 flex items-center justify-center">
                   <img
-                    src="https://www.image2url.com/r2/default/images/1790677608838-76485589-417f-4221-8ebc-321a0d4b3a09.png"
+                    src={ASSET_IMAGES.localSale}
                     alt="Local Sale"
                     className="w-full h-full object-contain select-none transition-transform group-hover:scale-105 duration-200"
                     referrerPolicy="no-referrer"
@@ -119,7 +119,7 @@ export const ProductTypeSelection: React.FC<ProductTypeSelectionProps> = ({
               >
                 <div className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 flex items-center justify-center">
                   <img
-                    src="https://www.image2url.com/r2/default/images/1790677644183-cb2fc12c-6bec-4217-bc99-e4906d9d58bb.png"
+                    src={ASSET_IMAGES.exportProduct}
                     alt="Export Product"
                     className="w-full h-full object-contain select-none transition-transform group-hover:scale-105 duration-200"
                     referrerPolicy="no-referrer"

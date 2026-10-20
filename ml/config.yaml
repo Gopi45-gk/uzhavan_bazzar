@@ -21,14 +21,14 @@ detection:
   batch_size: 32
   epochs: 10
   patience: 4
-  confidence_threshold: 0.35
+  confidence_threshold: 0.22
   iou_threshold: 0.45
 
 quality:
   architecture: "mobilenet_v3_large"  # Transfer learning from ImageNet
   imgsz: 224
-  batch_size: 32
-  epochs: 15
+  batch_size: 64
+  epochs: 12
   learning_rate: 0.0005
   weight_decay: 0.0001
   patience: 4

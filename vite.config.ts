@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
@@ -14,11 +15,11 @@ export default defineConfig(() => {
     server: {
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          target: process.env.VITE_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8008',
           changeOrigin: true,
         },
         '/health': {
-          target: 'http://localhost:8000',
+          target: process.env.VITE_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8008',
           changeOrigin: true,
         },
       },
@@ -31,6 +32,10 @@ export default defineConfig(() => {
           '**/ml_env/**',
           '**/ml/**',
           '**/dataset/**',
+          '**/Unified_Dataset/**',
+          '**/train/**',
+          '**/test/**',
+          '**/valid/**',
           '**/models/**',
           '**/dist/**',
           '**/Uzhavan_Bazaar/**',
@@ -38,6 +43,9 @@ export default defineConfig(() => {
           '**/vegetable/**',
           '**/.next/**',
           '**/.git/**',
+          '**/*.jpg',
+          '**/*.jpeg',
+          '**/*.png',
         ],
       },
     },

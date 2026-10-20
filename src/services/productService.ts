@@ -248,7 +248,7 @@ export const productService = {
               ? d.images
               : [primaryImage];
 
-          const pName = d.productName || d.name || 'Farm Fresh Produce';
+          const pName = d.productName || d.name || 'Farm Produce';
           const pQty = d.quantity ?? d.quantityKg ?? 100;
           const pUnit = d.unit || 'kg';
           const pPriceStr = d.price || `₹${d.optimizedPriceMax || d.marketPrice || 40} / ${pUnit}`;

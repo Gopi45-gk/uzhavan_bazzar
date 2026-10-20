@@ -83,12 +83,6 @@ export default function App() {
       }
     } catch {}
 
-    const savedScreen = localStorage.getItem('uzhavan_last_screen') as ScreenType | null;
-    if (savedScreen && savedScreen !== 'splash' && savedScreen in SCREEN_ORDER) {
-      navigateTo(savedScreen, 1);
-      return;
-    }
-
     const hasChosenLang = localStorage.getItem('uzhavan_selected_language') || localStorage.getItem('selectedLanguage');
     if (hasChosenLang) {
       navigateTo('role', 1);
@@ -112,12 +106,12 @@ export default function App() {
     }
   };
 
-  // Automatically transition from splash after 2.6 seconds
+  // Automatically transition from splash after 4.5 seconds
   useEffect(() => {
     if (currentScreen === 'splash') {
       const timer = setTimeout(() => {
         handleSplashContinue();
-      }, 2600);
+      }, 4500);
       return () => clearTimeout(timer);
     }
   }, [currentScreen, splashKey]);

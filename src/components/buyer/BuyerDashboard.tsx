@@ -1,3 +1,4 @@
+import { ASSET_IMAGES } from "../../constants/assets";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -142,7 +143,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           const primaryImg =
             c.imageUrl ||
             (c.imageUrls && c.imageUrls.length > 0 ? c.imageUrls[0] : null) ||
-            'https://www.image2url.com/r2/default/images/1790515781753-c4236b67-e877-40a6-851c-b591799d290e.png';
+            ASSET_IMAGES.cattleCow;
 
           return {
             id: c.id || `cattle-${idx}`,

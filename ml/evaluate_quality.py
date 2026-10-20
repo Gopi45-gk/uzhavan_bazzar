@@ -160,11 +160,11 @@ def evaluate_quality():
         "median": float(np.median(all_quality_scores)),
     }
     
-    # Grade distribution
-    grade_counts = {"A": 0, "B": 0, "C": 0, "D": 0}
+    # Grade distribution (Grade A, B, C)
+    grade_counts = {g: 0 for g in config["grading"]["grades"].keys()}
     for score in all_quality_scores:
         grade = score_to_grade(score, config["grading"])
-        grade_counts[grade] += 1
+        grade_counts[grade] = grade_counts.get(grade, 0) + 1
     
     # Print results
     print(f"\n{'='*60}")
@@ -235,10 +235,10 @@ def evaluate_quality():
         axes[0, 1].legend()
         axes[0, 1].grid(True, alpha=0.3)
         
-        # Grade distribution bar chart
         grades = list(grade_counts.keys())
         counts = list(grade_counts.values())
-        colors = ['#4CAF50', '#8BC34A', '#FF9800', '#F44336']
+        palette = ['#4CAF50', '#8BC34A', '#FF9800', '#F44336']
+        colors = palette[:len(grades)]
         axes[1, 0].bar(grades, counts, color=colors, edgecolor='white', linewidth=1.5)
         axes[1, 0].set_title("Grade Distribution", fontsize=14, fontweight='bold')
         axes[1, 0].set_xlabel("Grade")
@@ -366,8 +366,8 @@ def generate_final_report(config, quality_metrics, cls_report_text):
         f.write("|-------|-------|-------------|\n")
         gd = quality_metrics["grade_distribution"]
         grading = config["grading"]["grades"]
-        for grade in ["A", "B", "C", "D"]:
-            desc = grading[grade]["description"]
+        for grade in grading.keys():
+            desc = grading[grade].get("description", f"Grade {grade}")
             count = gd.get(grade, 0)
             f.write(f"| **{grade}** | {count} | {desc} |\n")
         f.write("\n")
