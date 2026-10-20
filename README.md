@@ -8,8 +8,20 @@
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.0-38B2AC.svg?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%26%20Firestore-FFCA28.svg?logo=firebase&logoColor=black)](https://firebase.google.com/)
 [![Accuracy](https://img.shields.io/badge/ML%20Accuracy-99.43%25-brightgreen.svg)]()
+[![Live Deployment](https://img.shields.io/badge/Live%20Website-uzhavan--bazzar.duckdns.org-00C853?style=flat&logo=nginx&logoColor=white)](https://uzhavan-bazzar.duckdns.org)
 
 > **Uzhavan Bazzar** is an AI-powered direct-from-farmer agricultural marketplace. It bridges local farmers and buyers in India with automated 4-view computer vision produce grading, real-time APMC Mandi fair pricing recommendations, direct livestock/cattle trading, and seamless regional delivery logistics.
+
+---
+
+## 🌐 Live Production Deployment
+
+| Service | Access Link | Description |
+| :--- | :--- | :--- |
+| **🌾 Production Web App** | **[https://uzhavan-bazzar.duckdns.org](https://uzhavan-bazzar.duckdns.org)** | Live farmer & buyer platform with SSL (Let's Encrypt) |
+| **🚀 Interactive Swagger API** | **[https://uzhavan-bazzar.duckdns.org/docs](https://uzhavan-bazzar.duckdns.org/docs)** | Live FastAPI interactive documentation & testing |
+| **🩺 Server Health & GPU Status** | **[https://uzhavan-bazzar.duckdns.org/health](https://uzhavan-bazzar.duckdns.org/health)** | Live telemetry, model loading, and system diagnostics |
+| **☁️ AWS Cloud Host** | `http://54.66.139.31` | AWS EC2 / Lightsail direct host IP |
 
 ---
 
